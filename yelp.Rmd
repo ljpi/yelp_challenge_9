@@ -1,0 +1,221 @@
+---
+title: "Can Demographics Be Used to Help Model the Restaurant Industry?"
+author: "Lester Pi"
+date: "2/7/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(jsonlite)
+library('vars')
+library('readxl')
+library('Quandl')
+library('tseries')
+library("forecast")
+library("quantmod")
+library("xts")
+library("tis")
+library("moments")
+library('stats')
+library("strucchange")
+library(knitr)
+library(rmarkdown)
+library(sqldf)
+```
+
+```{r setup, include=FALSE}
+opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
+opts_chunk$set(dev = 'pdf')
+```
+
+#outline
+intro
+data set explantions
+  yelp data
+  demographic data
+    describe
+analysis
+  types of restaurants ~ demographics
+  types of restaurants and star ratings
+  time series of reviews
+  
+
+#Introduction
+
+Hypothesis: 
+demographics data (racial, income, etc.) can help model restaurant industry (types of restaurants, average reviews, price, etc.)
+
+possible outcomes: 
+yes, there is a relationship between demographics and restaurants - more chinese => more chinese restaurants?, more hispanics => less french restaurants?
+no, there is no relationship that can be found.
+
+
+
+#Data Sets
+
+yelp + demographics data per country
+
+
+
+
+
+
+```{r}
+#SETUP
+setwd("/Users/lesterpi/Desktop/Folders/Random Junk/other/yelp_dataset_challenge_round9")
+
+#load data example
+#json_file = file("yelp_academic_dataset_checkin.json")
+#json_data = jsonlite::stream_in(json_file)
+#head(json_data)
+#length(json_data$business_id)
+
+load_json = function(filename){
+  json_file = file(filename)
+  json_data = jsonlite::stream_in(json_file)
+  return(json_data)
+}
+
+business = load_json("yelp_academic_dataset_business.json")
+#review = load_json("yelp_academic_dataset_review.json")
+#checkin = load_json("yelp_academic_dataset_checkin.json")
+#tip = load_json("yelp_academic_dataset_tip.json")
+#user = load_json("yelp_academic_dataset_user.json")
+
+remove_lists_from_df = function(df){
+  i=1
+  while(i <= length(df)){
+    if(class(df[,i])=="list"){
+      df[i] = sapply(df[,i], paste, collapse="|")
+    }
+    i=i+1
+  }
+  
+  return(df)
+}
+```
+#Exploring the Data
+
+
+```{r}
+business = remove_lists_from_df(business)
+
+business_us = sqldf("select * from business where (state = 'AZ' or state = 'IL' 
+                    or state = 'NC' or state = 'NV' or state = 'NY' or state = 'OH' 
+                    or state = 'PA' or state = 'SC' or state = 'VT' or state = 'WI')")
+
+restaurants = sqldf("select * from business where categories like '%Restaurants%'")
+restaurants_open = sqldf("select * from restaurants where is_open=1")
+```
+
+```{r}
+#number of states
+length(sqldf("select state from restaurants_open group by state")[,1])
+#number of cities
+length(sqldf("select city, state from restaurants_open group by city")[,1])
+```
+
+After examining the states and cities, there are some omissions, such as Los Angeles and New York City, that could have been extremely interesting if included. Nevertheless, let's see how the distribution of cities look.
+
+```{r}
+city_counts = sqldf("select city, state, count(business_id) as count from restaurants_open group by city")
+
+#ones, 100s, 200s, ..., 1000+
+buckets = c(0,0,0,0,0,0,0,0,0,0,0)
+
+i=1
+while(i <= length(city_counts[,1])){
+  temp_count = city_counts$count[i]
+  if(temp_count<100){
+    buckets[1]=buckets[1]+1
+  }
+  else if(temp_count>=100 & temp_count < 200){
+    buckets[2]=buckets[2]+1
+  }
+  else if(temp_count>=200 & temp_count < 300){
+    buckets[3]=buckets[3]+1
+  }
+  else if(temp_count>=300 & temp_count < 400){
+    buckets[4]=buckets[4]+1
+  }
+  else if(temp_count>=400 & temp_count < 500){
+    buckets[5]=buckets[5]+1
+  }
+  else if(temp_count>=500 & temp_count < 600){
+    buckets[6]=buckets[6]+1
+  }
+  else if(temp_count>=600 & temp_count < 700){
+    buckets[7]=buckets[7]+1
+  }
+  else if(temp_count>=700 & temp_count < 800){
+    buckets[8]=buckets[8]+1
+  }
+  else if(temp_count>=800 & temp_count < 900){
+    buckets[9]=buckets[9]+1
+  }
+  else if(temp_count>=900 & temp_count < 1000){
+    buckets[10]=buckets[10]+1
+  }
+  else if(temp_count>=1000){
+    buckets[11]=buckets[11]+1
+  }
+  else{
+    print(paste(c("ERROR at index: ",i)))
+  }
+  i=i+1
+}
+
+plot(buckets)
+
+```
+```{r}
+
+mean(city_counts$count)
+sd(city_counts$count)
+quantile(city_counts$count)
+
+```
+
+Looks like most of the cities fall into the first bucket of less than 100 businesses. However, we want to narrow our search to just large cities, so let's remove that bucket.
+
+```{r}
+city_counts2 = sqldf("select * from city_counts where count >100")
+buckets2 = buckets[2:length(buckets)]
+plot(buckets2)
+```
+
+```{r}
+
+mean(city_counts2$count)
+sd(city_counts2$count)
+quantile(city_counts2$count)
+```
+
+```{r}
+city_counts3 = sqldf("select * from city_counts where count >100 and count <1000")
+mean(city_counts3$count)
+sd(city_counts3$count)
+quantile(city_counts3$count)
+```
+
+```{r}
+#subset by >245 obs
+large_cities = sqldf("select city, state, count(business_id) as count from restaurants_open group by city having count > 245")
+large_cities
+```
+
+Let's take a look at demographics for our potential cities:
+
+```{r}
+large_cities = sqldf("select city, state, count(business_id) as count from business group by city having count > 700")
+```
+
+```{r}
+
+sqldf("select state from test group by state")
+sqldf("select city, state from business group by city")
+sqldf("select * from business where state = 'AZ'")
+
+```
