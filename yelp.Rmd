@@ -23,6 +23,7 @@ library("strucchange")
 library(knitr)
 library(rmarkdown)
 library(sqldf)
+library("hashmap")
 ```
 
 ```{r setup, include=FALSE}
@@ -64,7 +65,7 @@ yelp + demographics data per country
 
 ```{r}
 #SETUP
-setwd("/Users/lesterpi/Desktop/Folders/Random Junk/other/yelp_dataset_challenge_round9")
+setwd("C:/cygwin64/home/Lester/yelp_challenge_9")
 
 #load data example
 #json_file = file("yelp_academic_dataset_checkin.json")
@@ -99,7 +100,7 @@ remove_lists_from_df = function(df){
 #Exploring the Data
 
 
-```{r}
+```{r, echo=FALSE}
 business = remove_lists_from_df(business)
 
 business_us = sqldf("select * from business where (state = 'AZ' or state = 'IL' 
@@ -209,13 +210,189 @@ large_cities
 Let's take a look at demographics for our potential cities:
 
 ```{r}
-large_cities = sqldf("select city, state, count(business_id) as count from business group by city having count > 700")
+
+demographics = read.csv("demographics.csv",stringsAsFactors = FALSE)
+sqldf("select city, pop_by_race_2015 from demographics order by pop_by_race_2015")
+```
+
+We can see that Champaign definately doesn't meet our criteria for city size, so I'll drop it. Althought Tempe isn't as large as some of the other cities, I will make a judgement call and still group it as a upper mid to large sized city.
+
+```{r}
+
+#drop champaign
+demographics = demographics[-1,]
+demographics
 ```
 
 ```{r}
 
-sqldf("select state from test group by state")
-sqldf("select city, state from business group by city")
-sqldf("select * from business where state = 'AZ'")
+#find all occurances of restaurant types in each location
+
+cities_usethis = sqldf("select city from demographics")
+restaurants_usethis = sqldf("select * from restaurants_open where (city='Chandler' or
+                            city='Charlotte' or city='Cleveland' or city='Gilbert'
+                            or city='Glendale' or city='Henderson' or city='Las Vegas'
+                            or city='Madison' or city='Mesa' or city='Phoenix'
+                            or city='Pittsburgh' or city='Scottsdale' or city='Tempe')")
+
+get_city=function(df,i){
+  return(df$city[i])
+}
+
+
+create_hashmap = function(){
+  key="type"
+  value=0
+  temp = hashmap(key,value)
+  temp$erase(key)
+  return(temp)
+}
+
+hmap_chandler = create_hashmap()
+hmap_charlotte = create_hashmap()
+hmap_cleveland = create_hashmap()
+hmap_gilbert = create_hashmap()
+hmap_glendale = create_hashmap()
+hmap_henderson = create_hashmap()
+hmap_lasvegas = create_hashmap()
+hmap_madison = create_hashmap()
+hmap_mesa = create_hashmap()
+hmap_phoenix = create_hashmap()
+hmap_pittsburgh = create_hashmap()
+hmap_scottsdale = create_hashmap()
+hmap_tempe = create_hashmap()
+
+#takes string, delim by pipe |, counts occurances, updates hmap
+update_hashmap = function(hmap,s){
+  vec=unlist(strsplit(s,split="\\|"))
+  len = length(vec)
+  i = 1
+  while(i<=len){
+    
+    if(hmap$has_key(vec[i])){
+      temp = hmap$find(vec[i])
+      temp = temp+1
+      hmap$insert(vec[i],temp)
+    }
+    else{ 
+      hmap$insert(vec[i],1)
+    }
+    i=i+1
+  }
+  return(hmap)
+}
+
+i = 1
+while(i <= length(restaurants_usethis$business_id)){
+  city=get_city(restaurants_usethis,i)
+  cat = restaurants_usethis$categories[i]
+  if(city=="Chandler"){
+    hmap_chandler=update_hashmap(hmap_chandler,cat)
+  }
+  else if(city=="Charlotte"){
+    hmap_charlotte=update_hashmap(hmap_charlotte,cat)
+  }
+  else if(city=="Cleveland"){
+    hmap_cleveland=update_hashmap(hmap_cleveland,cat)
+  }
+  else if(city=="Gilbert"){
+    hmap_gilbert=update_hashmap(hmap_gilbert,cat)
+  }
+  else if(city=="Glendale"){
+    hmap_glendale=update_hashmap(hmap_glendale,cat)
+  }
+  else if(city=="Henderson"){
+    hmap_henderson=update_hashmap(hmap_henderson,cat)
+  }
+  else if(city=="Las Vegas"){
+    hmap_lasvegas=update_hashmap(hmap_lasvegas,cat)
+  }
+  else if(city=="Madison"){
+    hmap_madison=update_hashmap(hmap_madison,cat)
+  }
+  else if(city=="Mesa"){
+    hmap_mesa=update_hashmap(hmap_mesa,cat)
+  }
+  else if(city=="Phoenix"){
+    hmap_phoenix=update_hashmap(hmap_phoenix,cat)
+  }
+  else if(city=="Pittsburgh"){
+    hmap_pittsburgh=update_hashmap(hmap_pittsburgh,cat)
+  }
+  else if(city=="Scottsdale"){
+    hmap_scottsdale=update_hashmap(hmap_scottsdale,cat)
+  }
+  else if(city=="Tempe"){
+    hmap_tempe=update_hashmap(hmap_tempe,cat)
+  }
+  else{
+    print(paste(c("ERROR at index: ",i)))
+  }
+  
+  
+  i=i+1
+}
+
+
 
 ```
+
+```{r}
+
+hmap_vec = c(hmap_chandler,hmap_charlotte,hmap_cleveland,hmap_gilbert,
+             hmap_glendale,hmap_henderson,hmap_lasvegas,hmap_madison,
+             hmap_mesa,hmap_phoenix,hmap_pittsburgh,hmap_scottsdale,
+             hmap_tempe)
+hmap_vec
+
+category_demographics=function(hmap_vec,s,demographics){
+  #values_vec = c(hmap_vec[1]$find(s),hmap_vec[2]$find(s),
+  #               hmap_vec[3]$find(s),hmap_vec[4]$find(s),
+  #               hmap_vec[5]$find(s),hmap_vec[6]$find(s),
+  #               hmap_vec[7]$find(s),hmap_vec[8]$find(s),
+  #               hmap_vec[9]$find(s),hmap_vec[10]$find(s),
+  #               hmap_vec[11]$find(s),hmap_vec[12]$find(s),
+  #               hmap_vec[13]$find(s),hmap_vec[14]$find(s))
+  values_vec=c()
+  for(i in 1:length(hmap_vec)){
+    values_vec = c(values_vec,hmap_vec[[i]]$find(s))
+  }
+  
+  return(values_vec)
+}
+
+test = category_demographics(hmap_vec,"Chinese",demographics)
+test_reg = lm(test~demographics$asian)
+summary(test_reg)
+plot(demographics$asian,test)
+lines(demographics$asian,test_reg$fitted.values)
+
+#need to factor in %s
+asian_percent = demographics$asian/demographics$pop_by_race_2015
+asian_percent
+
+restaurants_usethis
+cities_usethis
+large_cities
+
+city_restaurant_counts=sqldf("select large_cities.city, count from (large_cities join cities_usethis on large_cities.city=cities_usethis.city)")
+city_restaurant_counts
+
+restaurant_chinese_percent=test/city_restaurant_counts$count
+restaurant_chinese_percent
+percent_reg_test = lm(restaurant_chinese_percent~asian_percent)
+summary(percent_reg_test)
+percent_reg_test2 = lm(restaurant_chinese_percent~asian_percent+demographics$income_index+demographics$pop_growth)
+summary(percent_reg_test2)
+```
+
+
+#analyze reviews
+
+```{r}
+#subset reviews to match city data
+reviews_usethis=sqldf("select review.stars, date, text, categories, city from review join restaurants_usethis on review.business_id=restaurants_usethis.business_id")
+
+```
+
+
