@@ -35,28 +35,29 @@ opts_chunk$set(dev = 'pdf')
 intro
 data set explantions
   yelp data
-  demographic data
-    describe
+  fred
 analysis
-  types of restaurants ~ demographics
-  types of restaurants and star ratings
-  time series of reviews
-  
+  yelp users time series
+  yelp reviews time series
+  yelp review stars time series
+  fred data for recession analysis
+  yelp stock data
+conclusion (hopefully)
+  the great has no effect on overall restaurant economies, but it does have effect on consumer preferance (need to prove)
 
 #Introduction
 
 Hypothesis: 
-demographics data (racial, income, etc.) can help model restaurant industry (types of restaurants, average reviews, price, etc.)
-
-possible outcomes: 
-yes, there is a relationship between demographics and restaurants - more chinese => more chinese restaurants?, more hispanics => less french restaurants?
-no, there is no relationship that can be found.
+The restaurant industry is not economically impacted by the great recession.
+The dynamics of reviews could be affected during the great recession, example: people complain about price more
 
 
 
 #Data Sets
 
-yelp + demographics data per country
+yelp
+fred
+yahoo finance
 
 
 
@@ -79,7 +80,7 @@ load_json = function(filename){
   return(json_data)
 }
 
-business = load_json("yelp_academic_dataset_business.json")
+#business = load_json("yelp_academic_dataset_business.json")
 #review = load_json("yelp_academic_dataset_review.json")
 #checkin = load_json("yelp_academic_dataset_checkin.json")
 #tip = load_json("yelp_academic_dataset_tip.json")
@@ -97,302 +98,533 @@ remove_lists_from_df = function(df){
   return(df)
 }
 ```
-#Exploring the Data
+
+#user data
+```{r}
+user = load_json("yelp_academic_dataset_user.json")
+colnames(user)
+subset_users = user[4]
+subset_users
+users_by_date = sqldf("select yelping_since, count(yelping_since) from subset_users group by yelping_since order by yelping_since")
+head(users_by_date)
+
+users_by_date=xts(users_by_date$`count(yelping_since)`, as.Date(users_by_date$yelping_since,"%Y-%m-%d"))
+ts_m = apply.monthly(users_by_date, sum)
+
+ts_m
+
+# users_by_date=sqldf("delete from users_by_date where yelping_since < '2012-03-02' ")
+# head(users_by_date)
+#ts_users = as.ts(users_by_date$`count(yelping_since)`, start = c(2004,10,12), end = c(2017,1,20), frequency=1)
+
+users_df = data.frame(date=index(ts_m), coredata(ts_m))
+users_df
+
+stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
+
+plot(stock_users,type="l")
+
+yelp_stock = get.hist.quote("YELP",quote="AdjClose",compression="m")
+yelp_stock
+
+plot(yelp_stock)
 
 
-```{r, echo=FALSE}
+log_user_growth = as.data.frame(diff(log(stock_users$coredata.ts_m.)))
+
+log_yelp_growth = as.data.frame(diff(log(yelp_stock)))
+
+log_user_growth
+log_yelp_growth
+
+ts_users = ts(log_user_growth,start=c(2012,3),freq=12)
+ts_users
+
+ts_yelp = ts(log_yelp_growth,start=c(2012,3),freq=12)
+ts_yelp
+
+plot(ts_users,col="blue")
+lines(ts_yelp,col="red")
+
+combined = cbind(ts_users,ts_yelp)
+
+select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+
+vm=VAR(combined,p=12)
+
+plot(vm$y)
+
+summary(vm)
+
+sp500 = get.hist.quote("^GSPC",quote="AdjClose",compression="m",start=as.Date("2012-03-01","%Y-%m-%d"),end=as.Date("2017-02-01","%Y-%m-%d"))
+
+sp500
+
+log_sp500_growth = as.data.frame(diff(log(sp500)))
+ts_sp500 = ts(log_sp500_growth,start=c(2012,3),freq=12)
+ts_sp500
+
+#*10 to strengthen sp500 growth rates
+yelp_sp_diff = ts_yelp-ts_sp500*10
+
+ts_yelp
+ts_sp500
+yelp_sp_diff
+
+plot(ts_users,col="blue")
+lines(ts_yelp,col="red")
+lines(yelp_sp_diff,col="green")
+
+combined = cbind(ts_users,yelp_sp_diff)
+
+select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+
+vm=VAR(combined,p=12)
+
+plot(vm$y)
+
+summary(vm)
+
+```
+
+Growth rate of users do not have an effect on the stock value of Yelp - no correlation to stock market. good! This elinates the possibility that effects are due to yelp as a company doing good or bad.
+
+should i examine review scores + users + etc and its relation to s&p500 during recession? or just move on to gdp and recession
+
+#review scores and gdp
+
+```{r}
+
+review = load_json("yelp_academic_dataset_review.json")
+
+#join with restaurant reviews
+business = load_json("yelp_academic_dataset_business.json")
 business = remove_lists_from_df(business)
+restaurants = sqldf("select business_id from business where categories like '%Restaurants%'")
 
-business_us = sqldf("select * from business where (state = 'AZ' or state = 'IL' 
-                    or state = 'NC' or state = 'NV' or state = 'NY' or state = 'OH' 
-                    or state = 'PA' or state = 'SC' or state = 'VT' or state = 'WI')")
+#use this for reviews
+restaurant_reviews = sqldf("select * from review join restaurants on review.business_id = restaurants.business_id")
 
-restaurants = sqldf("select * from business where categories like '%Restaurants%'")
-restaurants_open = sqldf("select * from restaurants where is_open=1")
+
+review_date_star = as.data.frame(restaurant_reviews$date)
+review_date_star$stars = restaurant_reviews$stars
+head(review_date_star)
+colnames(review_date_star)=c("date","stars")
+
+
+review_date_star$date=as.Date(review_date_star$date,"%Y-%m-%d")
+
+#freq
+review_counts_by_date = sqldf("select date, count(date) from review_date_star group by date order by date")
+
+head(review_counts_by_date)
+
+plot(review_counts_by_date$date,review_counts_by_date$`count(date)`,type="l")
+
+#convert to monthly
+reviews_by_date=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
+ts_rev_m = apply.monthly(reviews_by_date, sum)
+ts_rev_count = data.frame(date=index(ts_rev_m), coredata(ts_rev_m))
+ts_rev_count
+
+plot(ts_rev_count$date,ts_rev_count$coredata.ts_rev_m.,type="l")
+
+
+#review growth rates/new user growth rates
+log_rev_count=diff(log(ts_rev_count$coredata.ts_rev_m.))
+log_rev_count = ts(log_rev_count,start=c(2004,11),freq=12)
+
+ts_m
+log_user_count=diff(log(ts_m[,1]))
+log_user_count = ts(log_user_count,start=c(2004,11),freq=12)
+
+plot(log_rev_count,type="l", main="growth rate of user reviews and accounts")
+lines(log_user_count[,1],col="red")
+
+#stars by month
+stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
+ts_stars_m = apply.monthly(stars_by_date, sum)
+ts_stars = data.frame(date=index(ts_stars_m), coredata(ts_stars_m))
+
+
+ts_stars$avg = ts_stars$coredata.ts_stars_m./ts_rev_count$coredata.ts_rev_m.
+head(ts_stars)
+
+plot(ts_stars$date,ts_stars$avg)
+
+
 ```
+
+the growth rates plot shows that even during recession we don't see a dip in either. if there was constant account creation but a dip in reviews, that would mean the recession has an effect on # of reviews
+
+#descriptive stats of reviews and stars
 
 ```{r}
-#number of states
-length(sqldf("select state from restaurants_open group by state")[,1])
-#number of cities
-length(sqldf("select city, state from restaurants_open group by city")[,1])
+sd(ts_rev_count$coredata.ts_rev_m.)
+mean(ts_rev_count$coredata.ts_rev_m.)
+
+#NOTE , HAS  a 0 in data set need to remove still... too tired do that tomorrow
+sd(log_rev_count)
+mean(log_rev_count)
+
+#remove na from data set tmrw
+sd(log_user_count,na.rm=TRUE)
+mean(log_user_count,na.rm=TRUE)
+
+sd(ts_stars$avg)
+mean(ts_stars$avg)
+
 ```
 
-After examining the states and cities, there are some omissions, such as Los Angeles and New York City, that could have been extremely interesting if included. Nevertheless, let's see how the distribution of cities look.
+#fred data
 
 ```{r}
-city_counts = sqldf("select city, state, count(business_id) as count from restaurants_open group by city")
+#real gdp
+getSymbols('GDPC96', src = 'FRED')
+gdp = GDPC96
 
-#ones, 100s, 200s, ..., 1000+
-buckets = c(0,0,0,0,0,0,0,0,0,0,0)
+plot(gdp)
 
-i=1
-while(i <= length(city_counts[,1])){
-  temp_count = city_counts$count[i]
-  if(temp_count<100){
-    buckets[1]=buckets[1]+1
-  }
-  else if(temp_count>=100 & temp_count < 200){
-    buckets[2]=buckets[2]+1
-  }
-  else if(temp_count>=200 & temp_count < 300){
-    buckets[3]=buckets[3]+1
-  }
-  else if(temp_count>=300 & temp_count < 400){
-    buckets[4]=buckets[4]+1
-  }
-  else if(temp_count>=400 & temp_count < 500){
-    buckets[5]=buckets[5]+1
-  }
-  else if(temp_count>=500 & temp_count < 600){
-    buckets[6]=buckets[6]+1
-  }
-  else if(temp_count>=600 & temp_count < 700){
-    buckets[7]=buckets[7]+1
-  }
-  else if(temp_count>=700 & temp_count < 800){
-    buckets[8]=buckets[8]+1
-  }
-  else if(temp_count>=800 & temp_count < 900){
-    buckets[9]=buckets[9]+1
-  }
-  else if(temp_count>=900 & temp_count < 1000){
-    buckets[10]=buckets[10]+1
-  }
-  else if(temp_count>=1000){
-    buckets[11]=buckets[11]+1
-  }
-  else{
-    print(paste(c("ERROR at index: ",i)))
-  }
-  i=i+1
-}
-
-plot(buckets)
+# gdp_growth = 
 
 ```
+
+
+
+
+#examine social dynamics during recessions through $$$ dollar signs as well as review texts
+do people eat at cheaper places? do people care more about overpriced food?
 ```{r}
 
-mean(city_counts$count)
-sd(city_counts$count)
-quantile(city_counts$count)
 
-```
-
-Looks like most of the cities fall into the first bucket of less than 100 businesses. However, we want to narrow our search to just large cities, so let's remove that bucket.
-
-```{r}
-city_counts2 = sqldf("select * from city_counts where count >100")
-buckets2 = buckets[2:length(buckets)]
-plot(buckets2)
-```
-
-```{r}
-
-mean(city_counts2$count)
-sd(city_counts2$count)
-quantile(city_counts2$count)
-```
-
-```{r}
-city_counts3 = sqldf("select * from city_counts where count >100 and count <1000")
-mean(city_counts3$count)
-sd(city_counts3$count)
-quantile(city_counts3$count)
-```
-
-```{r}
-#subset by >245 obs
-large_cities = sqldf("select city, state, count(business_id) as count from restaurants_open group by city having count > 245")
-large_cities
-```
-
-Let's take a look at demographics for our potential cities:
-
-```{r}
-
-demographics = read.csv("demographics.csv",stringsAsFactors = FALSE)
-sqldf("select city, pop_by_race_2015 from demographics order by pop_by_race_2015")
-```
-
-We can see that Champaign definately doesn't meet our criteria for city size, so I'll drop it. Althought Tempe isn't as large as some of the other cities, I will make a judgement call and still group it as a upper mid to large sized city.
-
-```{r}
-
-#drop champaign
-demographics = demographics[-1,]
-demographics
-```
-
-```{r}
-
-#find all occurances of restaurant types in each location
-
-cities_usethis = sqldf("select city from demographics")
-restaurants_usethis = sqldf("select * from restaurants_open where (city='Chandler' or
-                            city='Charlotte' or city='Cleveland' or city='Gilbert'
-                            or city='Glendale' or city='Henderson' or city='Las Vegas'
-                            or city='Madison' or city='Mesa' or city='Phoenix'
-                            or city='Pittsburgh' or city='Scottsdale' or city='Tempe')")
-
-get_city=function(df,i){
-  return(df$city[i])
-}
-
-
-create_hashmap = function(){
-  key="type"
-  value=0
-  temp = hashmap(key,value)
-  temp$erase(key)
-  return(temp)
-}
-
-hmap_chandler = create_hashmap()
-hmap_charlotte = create_hashmap()
-hmap_cleveland = create_hashmap()
-hmap_gilbert = create_hashmap()
-hmap_glendale = create_hashmap()
-hmap_henderson = create_hashmap()
-hmap_lasvegas = create_hashmap()
-hmap_madison = create_hashmap()
-hmap_mesa = create_hashmap()
-hmap_phoenix = create_hashmap()
-hmap_pittsburgh = create_hashmap()
-hmap_scottsdale = create_hashmap()
-hmap_tempe = create_hashmap()
-
-#takes string, delim by pipe |, counts occurances, updates hmap
-update_hashmap = function(hmap,s){
-  vec=unlist(strsplit(s,split="\\|"))
-  len = length(vec)
-  i = 1
-  while(i<=len){
-    
-    if(hmap$has_key(vec[i])){
-      temp = hmap$find(vec[i])
-      temp = temp+1
-      hmap$insert(vec[i],temp)
-    }
-    else{ 
-      hmap$insert(vec[i],1)
-    }
-    i=i+1
-  }
-  return(hmap)
-}
-
-i = 1
-while(i <= length(restaurants_usethis$business_id)){
-  city=get_city(restaurants_usethis,i)
-  cat = restaurants_usethis$categories[i]
-  if(city=="Chandler"){
-    hmap_chandler=update_hashmap(hmap_chandler,cat)
-  }
-  else if(city=="Charlotte"){
-    hmap_charlotte=update_hashmap(hmap_charlotte,cat)
-  }
-  else if(city=="Cleveland"){
-    hmap_cleveland=update_hashmap(hmap_cleveland,cat)
-  }
-  else if(city=="Gilbert"){
-    hmap_gilbert=update_hashmap(hmap_gilbert,cat)
-  }
-  else if(city=="Glendale"){
-    hmap_glendale=update_hashmap(hmap_glendale,cat)
-  }
-  else if(city=="Henderson"){
-    hmap_henderson=update_hashmap(hmap_henderson,cat)
-  }
-  else if(city=="Las Vegas"){
-    hmap_lasvegas=update_hashmap(hmap_lasvegas,cat)
-  }
-  else if(city=="Madison"){
-    hmap_madison=update_hashmap(hmap_madison,cat)
-  }
-  else if(city=="Mesa"){
-    hmap_mesa=update_hashmap(hmap_mesa,cat)
-  }
-  else if(city=="Phoenix"){
-    hmap_phoenix=update_hashmap(hmap_phoenix,cat)
-  }
-  else if(city=="Pittsburgh"){
-    hmap_pittsburgh=update_hashmap(hmap_pittsburgh,cat)
-  }
-  else if(city=="Scottsdale"){
-    hmap_scottsdale=update_hashmap(hmap_scottsdale,cat)
-  }
-  else if(city=="Tempe"){
-    hmap_tempe=update_hashmap(hmap_tempe,cat)
-  }
-  else{
-    print(paste(c("ERROR at index: ",i)))
-  }
-  
-  
-  i=i+1
-}
 
 
 
 ```
 
-```{r}
-
-hmap_vec = c(hmap_chandler,hmap_charlotte,hmap_cleveland,hmap_gilbert,
-             hmap_glendale,hmap_henderson,hmap_lasvegas,hmap_madison,
-             hmap_mesa,hmap_phoenix,hmap_pittsburgh,hmap_scottsdale,
-             hmap_tempe)
-hmap_vec
-
-category_demographics=function(hmap_vec,s,demographics){
-  #values_vec = c(hmap_vec[1]$find(s),hmap_vec[2]$find(s),
-  #               hmap_vec[3]$find(s),hmap_vec[4]$find(s),
-  #               hmap_vec[5]$find(s),hmap_vec[6]$find(s),
-  #               hmap_vec[7]$find(s),hmap_vec[8]$find(s),
-  #               hmap_vec[9]$find(s),hmap_vec[10]$find(s),
-  #               hmap_vec[11]$find(s),hmap_vec[12]$find(s),
-  #               hmap_vec[13]$find(s),hmap_vec[14]$find(s))
-  values_vec=c()
-  for(i in 1:length(hmap_vec)){
-    values_vec = c(values_vec,hmap_vec[[i]]$find(s))
-  }
-  
-  return(values_vec)
-}
-
-test = category_demographics(hmap_vec,"Chinese",demographics)
-test_reg = lm(test~demographics$asian)
-summary(test_reg)
-plot(demographics$asian,test)
-lines(demographics$asian,test_reg$fitted.values)
-
-#need to factor in %s
-asian_percent = demographics$asian/demographics$pop_by_race_2015
-asian_percent
-
-restaurants_usethis
-cities_usethis
-large_cities
-
-city_restaurant_counts=sqldf("select large_cities.city, count from (large_cities join cities_usethis on large_cities.city=cities_usethis.city)")
-city_restaurant_counts
-
-restaurant_chinese_percent=test/city_restaurant_counts$count
-restaurant_chinese_percent
-percent_reg_test = lm(restaurant_chinese_percent~asian_percent)
-summary(percent_reg_test)
-percent_reg_test2 = lm(restaurant_chinese_percent~asian_percent+demographics$income_index+demographics$pop_growth)
-summary(percent_reg_test2)
-```
 
 
-#analyze reviews
 
-```{r}
-#subset reviews to match city data
-reviews_usethis=sqldf("select review.stars, date, text, categories, city from review join restaurants_usethis on review.business_id=restaurants_usethis.business_id")
 
-```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+old stuff
+
+
+
+<!-- #Exploring the Data -->
+
+
+<!-- ```{r, echo=FALSE} -->
+<!-- business = remove_lists_from_df(business) -->
+
+<!-- business_us = sqldf("select * from business where (state = 'AZ' or state = 'IL'  -->
+<!--                     or state = 'NC' or state = 'NV' or state = 'NY' or state = 'OH'  -->
+<!--                     or state = 'PA' or state = 'SC' or state = 'VT' or state = 'WI')") -->
+
+<!-- restaurants = sqldf("select * from business where categories like '%Restaurants%'") -->
+<!-- restaurants_open = sqldf("select * from restaurants where is_open=1") -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #number of states -->
+<!-- length(sqldf("select state from restaurants_open group by state")[,1]) -->
+<!-- #number of cities -->
+<!-- length(sqldf("select city, state from restaurants_open group by city")[,1]) -->
+<!-- ``` -->
+
+<!-- After examining the states and cities, there are some omissions, such as Los Angeles and New York City, that could have been extremely interesting if included. Nevertheless, let's see how the distribution of cities look. -->
+
+<!-- ```{r} -->
+<!-- city_counts = sqldf("select city, state, count(business_id) as count from restaurants_open group by city") -->
+
+<!-- #ones, 100s, 200s, ..., 1000+ -->
+<!-- buckets = c(0,0,0,0,0,0,0,0,0,0,0) -->
+
+<!-- i=1 -->
+<!-- while(i <= length(city_counts[,1])){ -->
+<!--   temp_count = city_counts$count[i] -->
+<!--   if(temp_count<100){ -->
+<!--     buckets[1]=buckets[1]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=100 & temp_count < 200){ -->
+<!--     buckets[2]=buckets[2]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=200 & temp_count < 300){ -->
+<!--     buckets[3]=buckets[3]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=300 & temp_count < 400){ -->
+<!--     buckets[4]=buckets[4]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=400 & temp_count < 500){ -->
+<!--     buckets[5]=buckets[5]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=500 & temp_count < 600){ -->
+<!--     buckets[6]=buckets[6]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=600 & temp_count < 700){ -->
+<!--     buckets[7]=buckets[7]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=700 & temp_count < 800){ -->
+<!--     buckets[8]=buckets[8]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=800 & temp_count < 900){ -->
+<!--     buckets[9]=buckets[9]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=900 & temp_count < 1000){ -->
+<!--     buckets[10]=buckets[10]+1 -->
+<!--   } -->
+<!--   else if(temp_count>=1000){ -->
+<!--     buckets[11]=buckets[11]+1 -->
+<!--   } -->
+<!--   else{ -->
+<!--     print(paste(c("ERROR at index: ",i))) -->
+<!--   } -->
+<!--   i=i+1 -->
+<!-- } -->
+
+<!-- plot(buckets) -->
+
+<!-- ``` -->
+<!-- ```{r} -->
+
+<!-- mean(city_counts$count) -->
+<!-- sd(city_counts$count) -->
+<!-- quantile(city_counts$count) -->
+
+<!-- ``` -->
+
+<!-- Looks like most of the cities fall into the first bucket of less than 100 businesses. However, we want to narrow our search to just large cities, so let's remove that bucket. -->
+
+<!-- ```{r} -->
+<!-- city_counts2 = sqldf("select * from city_counts where count >100") -->
+<!-- buckets2 = buckets[2:length(buckets)] -->
+<!-- plot(buckets2) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- mean(city_counts2$count) -->
+<!-- sd(city_counts2$count) -->
+<!-- quantile(city_counts2$count) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- city_counts3 = sqldf("select * from city_counts where count >100 and count <1000") -->
+<!-- mean(city_counts3$count) -->
+<!-- sd(city_counts3$count) -->
+<!-- quantile(city_counts3$count) -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+<!-- #subset by >245 obs -->
+<!-- large_cities = sqldf("select city, state, count(business_id) as count from restaurants_open group by city having count > 245") -->
+<!-- large_cities -->
+<!-- ``` -->
+
+<!-- Let's take a look at demographics for our potential cities: -->
+
+<!-- ```{r} -->
+
+<!-- demographics = read.csv("demographics.csv",stringsAsFactors = FALSE) -->
+<!-- sqldf("select city, pop_by_race_2015 from demographics order by pop_by_race_2015") -->
+<!-- ``` -->
+
+<!-- We can see that Champaign definately doesn't meet our criteria for city size, so I'll drop it. Althought Tempe isn't as large as some of the other cities, I will make a judgement call and still group it as a upper mid to large sized city. -->
+
+<!-- ```{r} -->
+
+<!-- #drop champaign -->
+<!-- demographics = demographics[-1,] -->
+<!-- demographics -->
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- #find all occurances of restaurant types in each location -->
+
+<!-- cities_usethis = sqldf("select city from demographics") -->
+<!-- restaurants_usethis = sqldf("select * from restaurants_open where (city='Chandler' or -->
+<!--                             city='Charlotte' or city='Cleveland' or city='Gilbert' -->
+<!--                             or city='Glendale' or city='Henderson' or city='Las Vegas' -->
+<!--                             or city='Madison' or city='Mesa' or city='Phoenix' -->
+<!--                             or city='Pittsburgh' or city='Scottsdale' or city='Tempe')") -->
+
+<!-- get_city=function(df,i){ -->
+<!--   return(df$city[i]) -->
+<!-- } -->
+
+
+<!-- create_hashmap = function(){ -->
+<!--   key="type" -->
+<!--   value=0 -->
+<!--   temp = hashmap(key,value) -->
+<!--   temp$erase(key) -->
+<!--   return(temp) -->
+<!-- } -->
+
+<!-- hmap_chandler = create_hashmap() -->
+<!-- hmap_charlotte = create_hashmap() -->
+<!-- hmap_cleveland = create_hashmap() -->
+<!-- hmap_gilbert = create_hashmap() -->
+<!-- hmap_glendale = create_hashmap() -->
+<!-- hmap_henderson = create_hashmap() -->
+<!-- hmap_lasvegas = create_hashmap() -->
+<!-- hmap_madison = create_hashmap() -->
+<!-- hmap_mesa = create_hashmap() -->
+<!-- hmap_phoenix = create_hashmap() -->
+<!-- hmap_pittsburgh = create_hashmap() -->
+<!-- hmap_scottsdale = create_hashmap() -->
+<!-- hmap_tempe = create_hashmap() -->
+
+<!-- #takes string, delim by pipe |, counts occurances, updates hmap -->
+<!-- update_hashmap = function(hmap,s){ -->
+<!--   vec=unlist(strsplit(s,split="\\|")) -->
+<!--   len = length(vec) -->
+<!--   i = 1 -->
+<!--   while(i<=len){ -->
+
+<!--     if(hmap$has_key(vec[i])){ -->
+<!--       temp = hmap$find(vec[i]) -->
+<!--       temp = temp+1 -->
+<!--       hmap$insert(vec[i],temp) -->
+<!--     } -->
+<!--     else{  -->
+<!--       hmap$insert(vec[i],1) -->
+<!--     } -->
+<!--     i=i+1 -->
+<!--   } -->
+<!--   return(hmap) -->
+<!-- } -->
+
+<!-- i = 1 -->
+<!-- while(i <= length(restaurants_usethis$business_id)){ -->
+<!--   city=get_city(restaurants_usethis,i) -->
+<!--   cat = restaurants_usethis$categories[i] -->
+<!--   if(city=="Chandler"){ -->
+<!--     hmap_chandler=update_hashmap(hmap_chandler,cat) -->
+<!--   } -->
+<!--   else if(city=="Charlotte"){ -->
+<!--     hmap_charlotte=update_hashmap(hmap_charlotte,cat) -->
+<!--   } -->
+<!--   else if(city=="Cleveland"){ -->
+<!--     hmap_cleveland=update_hashmap(hmap_cleveland,cat) -->
+<!--   } -->
+<!--   else if(city=="Gilbert"){ -->
+<!--     hmap_gilbert=update_hashmap(hmap_gilbert,cat) -->
+<!--   } -->
+<!--   else if(city=="Glendale"){ -->
+<!--     hmap_glendale=update_hashmap(hmap_glendale,cat) -->
+<!--   } -->
+<!--   else if(city=="Henderson"){ -->
+<!--     hmap_henderson=update_hashmap(hmap_henderson,cat) -->
+<!--   } -->
+<!--   else if(city=="Las Vegas"){ -->
+<!--     hmap_lasvegas=update_hashmap(hmap_lasvegas,cat) -->
+<!--   } -->
+<!--   else if(city=="Madison"){ -->
+<!--     hmap_madison=update_hashmap(hmap_madison,cat) -->
+<!--   } -->
+<!--   else if(city=="Mesa"){ -->
+<!--     hmap_mesa=update_hashmap(hmap_mesa,cat) -->
+<!--   } -->
+<!--   else if(city=="Phoenix"){ -->
+<!--     hmap_phoenix=update_hashmap(hmap_phoenix,cat) -->
+<!--   } -->
+<!--   else if(city=="Pittsburgh"){ -->
+<!--     hmap_pittsburgh=update_hashmap(hmap_pittsburgh,cat) -->
+<!--   } -->
+<!--   else if(city=="Scottsdale"){ -->
+<!--     hmap_scottsdale=update_hashmap(hmap_scottsdale,cat) -->
+<!--   } -->
+<!--   else if(city=="Tempe"){ -->
+<!--     hmap_tempe=update_hashmap(hmap_tempe,cat) -->
+<!--   } -->
+<!--   else{ -->
+<!--     print(paste(c("ERROR at index: ",i))) -->
+<!--   } -->
+
+
+<!--   i=i+1 -->
+<!-- } -->
+
+
+
+<!-- ``` -->
+
+<!-- ```{r} -->
+
+<!-- hmap_vec = c(hmap_chandler,hmap_charlotte,hmap_cleveland,hmap_gilbert, -->
+<!--              hmap_glendale,hmap_henderson,hmap_lasvegas,hmap_madison, -->
+<!--              hmap_mesa,hmap_phoenix,hmap_pittsburgh,hmap_scottsdale, -->
+<!--              hmap_tempe) -->
+<!-- hmap_vec -->
+
+<!-- category_demographics=function(hmap_vec,s,demographics){ -->
+<!--   #values_vec = c(hmap_vec[1]$find(s),hmap_vec[2]$find(s), -->
+<!--   #               hmap_vec[3]$find(s),hmap_vec[4]$find(s), -->
+<!--   #               hmap_vec[5]$find(s),hmap_vec[6]$find(s), -->
+<!--   #               hmap_vec[7]$find(s),hmap_vec[8]$find(s), -->
+<!--   #               hmap_vec[9]$find(s),hmap_vec[10]$find(s), -->
+<!--   #               hmap_vec[11]$find(s),hmap_vec[12]$find(s), -->
+<!--   #               hmap_vec[13]$find(s),hmap_vec[14]$find(s)) -->
+<!--   values_vec=c() -->
+<!--   for(i in 1:length(hmap_vec)){ -->
+<!--     values_vec = c(values_vec,hmap_vec[[i]]$find(s)) -->
+<!--   } -->
+
+<!--   return(values_vec) -->
+<!-- } -->
+
+<!-- test = category_demographics(hmap_vec,"Chinese",demographics) -->
+<!-- test_reg = lm(test~demographics$asian) -->
+<!-- summary(test_reg) -->
+<!-- plot(demographics$asian,test) -->
+<!-- lines(demographics$asian,test_reg$fitted.values) -->
+
+<!-- #need to factor in %s -->
+<!-- asian_percent = demographics$asian/demographics$pop_by_race_2015 -->
+<!-- asian_percent -->
+
+<!-- restaurants_usethis -->
+<!-- cities_usethis -->
+<!-- large_cities -->
+
+<!-- city_restaurant_counts=sqldf("select large_cities.city, count from (large_cities join cities_usethis on large_cities.city=cities_usethis.city)") -->
+<!-- city_restaurant_counts -->
+
+<!-- restaurant_chinese_percent=test/city_restaurant_counts$count -->
+<!-- restaurant_chinese_percent -->
+<!-- percent_reg_test = lm(restaurant_chinese_percent~asian_percent) -->
+<!-- summary(percent_reg_test) -->
+<!-- percent_reg_test2 = lm(restaurant_chinese_percent~asian_percent+demographics$income_index+demographics$pop_growth) -->
+<!-- summary(percent_reg_test2) -->
+<!-- ``` -->
+
+
+<!-- #analyze reviews -->
+
+<!-- ```{r} -->
+<!-- #subset reviews to match city data -->
+<!-- reviews_usethis=sqldf("select review.stars, date, text, categories, city from review join restaurants_usethis on review.business_id=restaurants_usethis.business_id") -->
+
+<!-- ``` -->
 
 
