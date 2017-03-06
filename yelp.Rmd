@@ -24,6 +24,11 @@ library(knitr)
 library(rmarkdown)
 library(sqldf)
 library("hashmap")
+library(stringr)
+library(fpp)
+library(tm)
+library(SnowballC)
+library(wordcloud)
 ```
 
 ```{r setup, include=FALSE}
@@ -105,11 +110,14 @@ user = load_json("yelp_academic_dataset_user.json")
 colnames(user)
 subset_users = user[4]
 subset_users
-users_by_date = sqldf("select yelping_since, count(yelping_since) from subset_users group by yelping_since order by yelping_since")
-head(users_by_date)
+users_by_date_all = sqldf("select yelping_since, count(yelping_since) from subset_users group by yelping_since order by yelping_since")
 
-users_by_date=xts(users_by_date$`count(yelping_since)`, as.Date(users_by_date$yelping_since,"%Y-%m-%d"))
-ts_m = apply.monthly(users_by_date, sum)
+
+#usethis
+users_by_date = with(users_by_date_all, users_by_date_all[(users_by_date_all$yelping_since >= "2005"), ])
+
+users_by_date_xts=xts(users_by_date$`count(yelping_since)`, as.Date(users_by_date$yelping_since,"%Y-%m-%d"))
+ts_m = apply.monthly(users_by_date_xts, sum)
 
 ts_m
 
@@ -124,7 +132,7 @@ stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
 
 plot(stock_users,type="l")
 
-yelp_stock = get.hist.quote("YELP",quote="AdjClose",compression="m")
+yelp_stock = get.hist.quote("YELP",end="2017-02-01",quote="AdjClose",compression="m")
 yelp_stock
 
 plot(yelp_stock)
@@ -202,8 +210,11 @@ business = load_json("yelp_academic_dataset_business.json")
 business = remove_lists_from_df(business)
 restaurants = sqldf("select business_id from business where categories like '%Restaurants%'")
 
+restaurant_reviews_all = sqldf("select * from review join restaurants on review.business_id = restaurants.business_id")
+colnames(restaurant_reviews_all) = c("review_id","user_id","b_id","stars","date","text","useful","funny","cool","type","business_id")
+
 #use this for reviews
-restaurant_reviews = sqldf("select * from review join restaurants on review.business_id = restaurants.business_id")
+restaurant_reviews = with(restaurant_reviews_all, restaurant_reviews_all[(restaurant_reviews_all$date >= "2005"), ])
 
 
 review_date_star = as.data.frame(restaurant_reviews$date)
@@ -232,14 +243,29 @@ plot(ts_rev_count$date,ts_rev_count$coredata.ts_rev_m.,type="l")
 
 #review growth rates/new user growth rates
 log_rev_count=diff(log(ts_rev_count$coredata.ts_rev_m.))
-log_rev_count = ts(log_rev_count,start=c(2004,11),freq=12)
+#log_rev_count[1]=NA
+log_rev_count = na.omit(log_rev_count)
+log_rev_count = ts(log_rev_count,start=c(2005,2),freq=12)
 
 ts_m
 log_user_count=diff(log(ts_m[,1]))
-log_user_count = ts(log_user_count,start=c(2004,11),freq=12)
+log_user_count = na.omit(log_user_count)
+log_user_count = ts(log_user_count,start=c(2005,2),freq=12)
 
 plot(log_rev_count,type="l", main="growth rate of user reviews and accounts")
 lines(log_user_count[,1],col="red")
+
+diff_logs = log_rev_count-log_user_count
+lines(diff_logs,col="blue")
+
+#create var of growth rates
+rates_combined = cbind(log_rev_count,log_user_count)
+select=VARselect(rates_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_rates=VAR(rates_combined,p=12)
+plot(vm_rates$y)
+summary(vm_rates)
+
+#do granger causality test
 
 #stars by month
 stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
@@ -263,13 +289,10 @@ the growth rates plot shows that even during recession we don't see a dip in eit
 sd(ts_rev_count$coredata.ts_rev_m.)
 mean(ts_rev_count$coredata.ts_rev_m.)
 
-#NOTE , HAS  a 0 in data set need to remove still... too tired do that tomorrow
+
 sd(log_rev_count)
 mean(log_rev_count)
 
-#remove na from data set tmrw
-sd(log_user_count,na.rm=TRUE)
-mean(log_user_count,na.rm=TRUE)
 
 sd(ts_stars$avg)
 mean(ts_stars$avg)
@@ -285,7 +308,33 @@ gdp = GDPC96
 
 plot(gdp)
 
-# gdp_growth = 
+gdp_growth = na.omit(diff(log(gdp)))
+plot(gdp_growth)
+gdp_growth_subset = with(gdp_growth, gdp_growth[index(gdp_growth) >= "2004-12-01", ])
+gdp_growth_subset = ts(gdp_growth_subset,start=c(2005,1),frequency = 4)
+
+#create quarterly user growth rate
+reviews_by_quarter=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
+ts_rev_m_quarter = apply.quarterly(reviews_by_quarter, sum)
+ts_rev_quarter = data.frame(date=index(ts_rev_m_quarter), coredata(ts_rev_m_quarter))
+ts_rev_quarter
+
+log_rev_quarter=diff(log(ts_rev_quarter$coredata.ts_rev_m_quarter.))
+log_rev_quarter = na.omit(log_rev_quarter)
+log_rev_quarter = ts(log_rev_quarter,start=c(2005),freq=4)
+
+length(log_rev_quarter)
+length(gdp_growth_subset)
+
+#var of gdp and user reviews growth rates
+gdp_combined = cbind(log_rev_quarter,gdp_growth_subset)
+select=VARselect(gdp_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_gdp=VAR(gdp_combined,p=12)
+plot(vm_gdp$y)
+summary(vm_gdp)
+
+#do a var on quarterly gdp growth and quarterly avg review score
+
 
 ```
 
@@ -296,7 +345,116 @@ plot(gdp)
 do people eat at cheaper places? do people care more about overpriced food?
 ```{r}
 
+#convert $ dollar signs to time series
+restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
 
+#create a dollar sign extractor
+get_dollar_signs=function(s){
+  temp=str_extract(s,"RestaurantsPriceRange2(.*?)[0-9]")
+  return(substr(temp,nchar(temp),nchar(temp)))
+}
+
+
+restaurant_dollars=data.frame(restaurant_visits$date)
+restaurant_dollars$dollars = get_dollar_signs(restaurant_visits$attributes)
+
+restaurant_dollars=na.omit(restaurant_dollars)
+class(restaurant_dollars$restaurant_visits.date)
+restaurant_dollars$restaurant_visits.date=as.character(restaurant_dollars$restaurant_visits.date)
+colnames(restaurant_dollars) = c("date","dollars")
+
+dollars_1 = sqldf("select * from restaurant_dollars where dollars=1")
+dollars_2 = sqldf("select * from restaurant_dollars where dollars=2")
+dollars_3 = sqldf("select * from restaurant_dollars where dollars=3")
+dollars_4 = sqldf("select * from restaurant_dollars where dollars=4")
+
+
+dollars_gbd_1 = sqldf("select date, count(date) from dollars_1 group by date order by date")
+dollars_gbd_2 = sqldf("select date, count(date) from dollars_2 group by date order by date")
+dollars_gbd_3 = sqldf("select date, count(date) from dollars_3 group by date order by date")
+dollars_gbd_4 = sqldf("select date, count(date) from dollars_4 group by date order by date")
+
+dollars_1_xts=xts(dollars_gbd_1$`count(date)`, as.Date(dollars_gbd_1$date,"%Y-%m-%d"))
+df_d_1 = apply.monthly(dollars_1_xts, sum)
+df_dollars_1 = data.frame(date=index(df_d_1), coredata(df_d_1))
+df_dollars_1
+
+dollars_2_xts=xts(dollars_gbd_2$`count(date)`, as.Date(dollars_gbd_2$date,"%Y-%m-%d"))
+df_d_2 = apply.monthly(dollars_2_xts, sum)
+df_dollars_2 = data.frame(date=index(df_d_2), coredata(df_d_2))
+df_dollars_2
+
+dollars_3_xts=xts(dollars_gbd_3$`count(date)`, as.Date(dollars_gbd_3$date,"%Y-%m-%d"))
+df_d_3 = apply.monthly(dollars_3_xts, sum)
+df_dollars_3 = data.frame(date=index(df_d_3), coredata(df_d_3))
+df_dollars_3
+
+dollars_4_xts=xts(dollars_gbd_4$`count(date)`, as.Date(dollars_gbd_4$date,"%Y-%m-%d"))
+df_d_4 = apply.monthly(dollars_4_xts, sum)
+df_dollars_4 = data.frame(date=index(df_d_4), coredata(df_d_4))
+df_dollars_4
+
+plot(df_dollars_1,type="l")
+plot(df_dollars_2,type="l")
+plot(df_dollars_3,type="l")
+plot(df_dollars_4,type="l")
+
+
+df_dollars_1_dlog = as.data.frame(diff(log(df_dollars_1$coredata.df_d_1.)))
+df_dollars_2_dlog = as.data.frame(diff(log(df_dollars_2$coredata.df_d_2.)))
+df_dollars_3_dlog = as.data.frame(diff(log(df_dollars_3$coredata.df_d_3.)))
+df_dollars_4_dlog = as.data.frame(diff(log(df_dollars_4$coredata.df_d_4.)))
+
+
+
+plot(df_dollars_1$date[2:length(df_dollars_1$date)],df_dollars_1_dlog$`diff(log(df_dollars_1$coredata.df_d_1.))`,type="l")
+plot(df_dollars_2$date[2:length(df_dollars_2$date)],df_dollars_2_dlog$`diff(log(df_dollars_2$coredata.df_d_2.))`,type="l")
+plot(df_dollars_3$date[2:length(df_dollars_3$date)],df_dollars_3_dlog$`diff(log(df_dollars_3$coredata.df_d_3.))`,type="l")
+plot(df_dollars_4$date[2:length(df_dollars_4$date)],df_dollars_4_dlog$`diff(log(df_dollars_4$coredata.df_d_4.))`,type="l")
+
+
+
+ts_dollar_1=ts(df_dollars_1$coredata.df_d_1.,start=c(2005,2),freq=12)
+decompose_ts_dollar_1=decompose(ts_dollar_1,"multiplicative")
+#plot(decompose_ts_dollar_1$seasonal)
+#plot(decompose_ts_dollar_1$trend)
+#plot(decompose_ts_dollar_1$random)
+dollar_1_adj = ts_dollar_1/decompose_ts_dollar_1$seasonal
+plot(dollar_1_adj)
+
+ts_dollar_2=ts(df_dollars_2$coredata.df_d_2.,start=c(2005,2),freq=12)
+decompose_ts_dollar_2=decompose(ts_dollar_2,"multiplicative")
+#plot(decompose_ts_dollar_2$seasonal)
+#plot(decompose_ts_dollar_2$trend)
+#plot(decompose_ts_dollar_2$random)
+dollar_2_adj = ts_dollar_2/decompose_ts_dollar_2$seasonal
+plot(dollar_2_adj)
+
+ts_dollar_3=ts(df_dollars_3$coredata.df_d_3.,start=c(2005,2),freq=12)
+decompose_ts_dollar_3=decompose(ts_dollar_3,"multiplicative")
+#plot(decompose_ts_dollar_3$seasonal)
+#plot(decompose_ts_dollar_3$trend)
+#plot(decompose_ts_dollar_3$random)
+dollar_3_adj = ts_dollar_3/decompose_ts_dollar_3$seasonal
+plot(dollar_3_adj)
+
+ts_dollar_4=ts(df_dollars_4$coredata.df_d_4.,start=c(2005,2),freq=12)
+decompose_ts_dollar_4=decompose(ts_dollar_4,"multiplicative")
+#plot(decompose_ts_dollar_4$seasonal)
+#plot(decompose_ts_dollar_4$trend)
+#plot(decompose_ts_dollar_4$random)
+dollar_4_adj = ts_dollar_4/decompose_ts_dollar_4$seasonal
+plot(dollar_4_adj)
+
+dollars_1_adj_dlog=diff(log(dollar_1_adj))
+dollars_2_adj_dlog=diff(log(dollar_2_adj))
+dollars_3_adj_dlog=diff(log(dollar_3_adj))
+dollars_4_adj_dlog=diff(log(dollar_4_adj))
+
+plot(dollars_1_adj_dlog)
+plot(dollars_2_adj_dlog)
+plot(dollars_3_adj_dlog)
+plot(dollars_4_adj_dlog)
 
 
 
@@ -307,8 +465,30 @@ do people eat at cheaper places? do people care more about overpriced food?
 
 
 
+analyze word usages
+```{r}
+
+buildWordCloud = function(data, pal,val,stem, name){
+  corpus = Corpus(VectorSource(data))
+  corpus = tm_map(corpus, content_transformer(tolower))
+  corpus = tm_map(corpus, PlainTextDocument)
+  corpus = tm_map(corpus, removePunctuation)
+  corpus = tm_map(corpus, removeWords, stopWords)
+  if(stem==1) corpus = tm_map(corpus, stemDocument)
+  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
+}
+stopWords = removePunctuation(stopwords('SMART'))
+
+head(restaurant_reviews)
+restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ])
+
+restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ])
+
+buildWordCloud(restaurant_reviews_rec$text, "Spectral",8,0, "test")
+buildWordCloud(restaurant_reviews_norec$text, "Spectral",8,0, "test2")
 
 
+```
 
 
 
