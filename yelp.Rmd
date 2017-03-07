@@ -1,6 +1,5 @@
 ---
-title: "Can Demographics Be Used to Help Model the Restaurant Industry?"
-author: "Lester Pi"
+title: "Yelpers in The Great Recession"
 date: "2/7/2017"
 output:
   pdf_document: default
