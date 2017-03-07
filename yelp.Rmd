@@ -376,7 +376,7 @@ gdp_growth_subset = with(gdp_growth, gdp_growth[index(gdp_growth) >= "2006-04-01
 gdp_growth_subset = ts(gdp_growth_subset,start=c(2006,2),frequency = 4)
 plot(gdp_growth_subset)
 
-#create quarterly user growth rate
+#create quarterly review growth rate
 reviews_by_quarter=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
 ts_rev_m_quarter = apply.quarterly(reviews_by_quarter, sum)
 ts_rev_quarter = data.frame(date=index(ts_rev_m_quarter), coredata(ts_rev_m_quarter))
@@ -499,33 +499,21 @@ plot(df_dollars_4$date[2:length(df_dollars_4$date)],df_dollars_4_dlog$`diff(log(
 
 ts_dollar_1=ts(df_dollars_1$coredata.df_d_1.,start=c(2005,2),freq=12)
 decompose_ts_dollar_1=decompose(ts_dollar_1,"multiplicative")
-#plot(decompose_ts_dollar_1$seasonal)
-#plot(decompose_ts_dollar_1$trend)
-#plot(decompose_ts_dollar_1$random)
 dollar_1_adj = ts_dollar_1/decompose_ts_dollar_1$seasonal
 plot(dollar_1_adj)
 
 ts_dollar_2=ts(df_dollars_2$coredata.df_d_2.,start=c(2005,2),freq=12)
 decompose_ts_dollar_2=decompose(ts_dollar_2,"multiplicative")
-#plot(decompose_ts_dollar_2$seasonal)
-#plot(decompose_ts_dollar_2$trend)
-#plot(decompose_ts_dollar_2$random)
 dollar_2_adj = ts_dollar_2/decompose_ts_dollar_2$seasonal
 plot(dollar_2_adj)
 
 ts_dollar_3=ts(df_dollars_3$coredata.df_d_3.,start=c(2005,2),freq=12)
 decompose_ts_dollar_3=decompose(ts_dollar_3,"multiplicative")
-#plot(decompose_ts_dollar_3$seasonal)
-#plot(decompose_ts_dollar_3$trend)
-#plot(decompose_ts_dollar_3$random)
 dollar_3_adj = ts_dollar_3/decompose_ts_dollar_3$seasonal
 plot(dollar_3_adj)
 
 ts_dollar_4=ts(df_dollars_4$coredata.df_d_4.,start=c(2005,2),freq=12)
 decompose_ts_dollar_4=decompose(ts_dollar_4,"multiplicative")
-#plot(decompose_ts_dollar_4$seasonal)
-#plot(decompose_ts_dollar_4$trend)
-#plot(decompose_ts_dollar_4$random)
 dollar_4_adj = ts_dollar_4/decompose_ts_dollar_4$seasonal
 plot(dollar_4_adj)
 
@@ -559,34 +547,34 @@ summary(gls_log_d4)
 #comment out for now, cuz takes too long to process
 
 
-<!-- analyze word usages -->
-<!-- ```{r} -->
+analyze word usages
+```{r}
 
-<!-- buildWordCloud = function(data, pal,val,stem, name){ -->
-<!--   corpus = Corpus(VectorSource(data)) -->
-<!--   corpus = tm_map(corpus, content_transformer(tolower)) -->
-<!--   corpus = tm_map(corpus, PlainTextDocument) -->
-<!--   corpus = tm_map(corpus, removePunctuation) -->
-<!--   corpus = tm_map(corpus, removeWords, stopWords) -->
-<!--   if(stem==1) corpus = tm_map(corpus, stemDocument) -->
-<!--   wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name) -->
-<!-- } -->
-<!-- stopWords = removePunctuation(stopwords('SMART')) -->
+buildWordCloud = function(data, pal,val,stem, name){
+  corpus = Corpus(VectorSource(data))
+  corpus = tm_map(corpus, content_transformer(tolower))
+  corpus = tm_map(corpus, PlainTextDocument)
+  corpus = tm_map(corpus, removePunctuation)
+  corpus = tm_map(corpus, removeWords, stopWords)
+  if(stem==1) corpus = tm_map(corpus, stemDocument)
+  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
+}
+stopWords = removePunctuation(stopwords('SMART'))
 
-<!-- head(restaurant_reviews) -->
-<!-- restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ]) -->
+head(restaurant_reviews)
+restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ])
 
-<!-- restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ]) -->
+restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ])
 
-<!-- buildWordCloud(restaurant_reviews_rec$text, "Spectral",8,0, "test") -->
-<!-- buildWordCloud(restaurant_reviews_norec$text, "Spectral",8,0, "test2") -->
-
-
-<!-- ``` -->
+buildWordCloud(restaurant_reviews_rec$text, "Spectral",8,0, "test")
+buildWordCloud(restaurant_reviews_norec$text, "Spectral",8,0, "test2")
 
 
+```
 
 
+
+#connect with restaurants
 
 ```{r}
 
@@ -594,18 +582,104 @@ restaurant_expenditures=read.csv("restaurant_expenditures.csv")
 restaurant_expenditures
 
 #add x axis with dates
-plot(seq(as.Date("2005/12/01"), by = "quarter",length.out = 44),restaurant_expenditures$real_exp,type="l")
+rest_exp_dates = seq(as.Date("2005/12/01"), by = "quarter",length.out = 44)
+
+plot(rest_exp_dates,restaurant_expenditures$real_exp,type="l")
+
+test_stationary(restaurant_expenditures$real_exp)
+
+rest_real_exp_diff_log = diff(log(restaurant_expenditures$real_exp))
+
+test_stationary(rest_real_exp_diff_log)
+
+
+rest_exp_dates_diff = rest_exp_dates[2:length(rest_exp_dates)]
+plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l")
+
+#STILL NOT STATIONARY WTF?!
+
 
 
 #create var + granger causality for real exp and gdp
-gdp__exp_combined = cbind(log_rev_quarter,gdp_growth_subset)
-select=VARselect(gdp_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_gdp=VAR(gdp_combined,p=12)
-plot(vm_gdp$y)
-summary(vm_gdp)
+gdp_exp_combined = cbind(rest_real_exp_diff_log,gdp_growth_subset)
+select=VARselect(gdp_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_gdp_exp=VAR(gdp_exp_combined,p=4)
+plot(vm_gdp_exp$y)
+summary(vm_gdp_exp)
+
+grangertest(rest_real_exp_diff_log~gdp_growth_subset[1:length(gdp_growth_subset)])
+grangertest(gdp_growth_subset[1:length(gdp_growth_subset)]~rest_real_exp_diff_log)
+
+rec_exp_diff_log_dummy = add_recession_dummy(rest_exp_dates_diff)
+gls_rest_real_exp_diff_log = gls(rest_real_exp_diff_log~rec_exp_diff_log_dummy)
+summary(gls_rest_real_exp_diff_log)
+
+```
+
+yes gdp granger causes restaurant expenditures + recession dummy :O
+
+
+
+#connect reviews with restaurants
+cuz #reviews to gdp is a far stretch
+
+```{r}
+
+rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
+select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_rev_exp=VAR(rev_exp_combined,p=4)
+plot(vm_rev_exp$y)
+summary(vm_rev_exp)
+
+grangertest(rest_real_exp_diff_log~log_rev_quarter)
+grangertest(log_rev_quarter~rest_real_exp_diff_log)
+#no granger causality
+
+grangertest(log_rev_quarter~gdp_growth_subset)
+
+grangertest(log_rev_quarter~rec_dummy_rev_growth_q)
+
+log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
+summary(log_rev_exp_gls)
 
 
 ```
+
+
+
+#seasonally adjust log reviews by quarter
+
+```{r}
+decompose_log_rev_quarter=decompose(log_rev_quarter,"additive")
+log_rev_quarter_adj=log_rev_quarter-decompose_log_rev_quarter$seasonal
+plot(log_rev_quarter_adj)
+
+
+rev_adj_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj)
+select=VARselect(rev_adj_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_rev_adj_exp=VAR(rev_adj_exp_combined,p=4)
+plot(vm_rev_adj_exp$y)
+summary(vm_rev_adj_exp)
+
+
+gls_rev_adj=gls(log_rev_quarter_adj~rec_dummy_rev_growth_q)
+summary(gls_rev_adj)
+
+log_rev_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
+summary(log_rev_gls)
+
+
+log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log+rest_real_exp_diff_log)
+summary(log_rev_exp_gls)
+```
+
+yelpers are not representative of overall restaurant goers, but are still effected by the recession
+
+
+
+
+
+
 
 
 
