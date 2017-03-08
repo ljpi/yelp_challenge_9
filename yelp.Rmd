@@ -3,6 +3,7 @@ title: "Yelpers in The Great Recession"
 date: "2/7/2017"
 output:
   pdf_document: default
+  latex_engine: xelatex
   html_document: default
 ---
 
@@ -47,14 +48,12 @@ analysis
   yelp review stars time series
   fred data for recession analysis
   yelp stock data
-conclusion (hopefully)
-  the great has no effect on overall restaurant economies, but it does have effect on consumer preferance (need to prove)
+conclusion 
 
 #Introduction
 
 Hypothesis: 
-The restaurant industry is not economically impacted by the great recession.
-The dynamics of reviews could be affected during the great recession, example: people complain about price more
+yelpers
 
 
 
@@ -63,6 +62,7 @@ The dynamics of reviews could be affected during the great recession, example: p
 yelp
 fred
 yahoo finance
+bea
 
 
 
@@ -209,18 +209,12 @@ plot(vm$y)
 
 summary(vm)
 
-test1=gls(yelp_sp_diff~ts_users)
-test2=lm(yelp_sp_diff~ts_users)
-
-summary(test1)
-summary(test2)
-
 
 ```
 
 Growth rate of users do not have an effect on the stock value of Yelp - no correlation to stock market. good! This elinates the possibility that effects are due to yelp as a company doing good or bad.
 
-should i examine review scores + users + etc and its relation to s&p500 during recession? or just move on to gdp and recession
+should i examine review scores + users + etc and its relation to s and p500 during recession? or just move on to gdp and recession
 
 #review scores and gdp
 
@@ -290,11 +284,16 @@ lines(log_user_count[,1],col="red")
 #create var of growth rates
 rates_combined = cbind(log_rev_count,log_user_count)
 select=VARselect(rates_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_rates=VAR(rates_combined,p=12)
+vm_rates=VAR(rates_combined,select$select[1])
 plot(vm_rates$y)
 summary(vm_rates)
 
 #do granger causality test
+grangertest(log_rev_count~log_user_count,order=select$select[1])
+grangertest(log_user_count~log_rev_count,order=select$select[1])
+
+user_rev_gls=gls(log_rev_count~log_user_count)
+summary(user_rev_gls)
 
 #stars by month
 stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
@@ -311,6 +310,8 @@ stars_recession_dummy = add_recession_dummy(ts_stars$date)
 stars_avg=ts_stars$avg
 stars_gls=gls(stars_avg~stars_recession_dummy)
 summary(stars_gls)
+
+
 
 test_stationary(ts_stars$avg)
 #convert to growth rates
@@ -334,11 +335,9 @@ stars_diff_log_avg = ts_stars_diff_log$avg
 stars_diff_log_gls = gls(stars_diff_log_avg~stars_recession_diff_log_dummy)
 summary(stars_diff_log_gls)
 
-
-
 ```
 
-the growth rates plot shows that even during recession we don't see a dip in either. if there was constant account creation but a dip in reviews, that would mean the recession has an effect on # of reviews
+the growth rates plot shows that even during recession we don't see a dip in either. if there was constant account creation but a dip in reviews, that would mean the recession has an effect on num of reviews
 
 #descriptive stats of reviews and stars
 
@@ -405,9 +404,11 @@ reg_reviews = lm(ts_rev_quarter$coredata.ts_rev_m_quarter.~recession_dummy_revie
 summary(reg_reviews)
 #first reg is misleading
 
+
+
 #look at growth rates
 
-rec_dummy_rev_growth_q = 2:length(recession_dummy_reviews_q)
+rec_dummy_rev_growth_q = recession_dummy_reviews_q[2:length(recession_dummy_reviews_q)]
 
 reg_log_reviews = lm(log_rev_quarter~rec_dummy_rev_growth_q)
 summary(reg_log_reviews)
@@ -421,9 +422,12 @@ summary(log_reviews_gls)
 
 
 
-#examine social dynamics during recessions through $$$ dollar signs as well as review texts
+#examine social dynamics during recessions through dollar signs as well as review texts
 do people eat at cheaper places? do people care more about overpriced food?
 ```{r}
+
+####CHANGE THIS SECTION TO USE TSLM#####
+
 
 #convert $ dollar signs to time series
 restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
@@ -494,6 +498,8 @@ plot(df_dollars_2$date[2:length(df_dollars_2$date)],df_dollars_2_dlog$`diff(log(
 plot(df_dollars_3$date[2:length(df_dollars_3$date)],df_dollars_3_dlog$`diff(log(df_dollars_3$coredata.df_d_3.))`,type="l")
 plot(df_dollars_4$date[2:length(df_dollars_4$date)],df_dollars_4_dlog$`diff(log(df_dollars_4$coredata.df_d_4.))`,type="l")
 
+
+
 #seasonally adjust the data
 
 ts_dollar_1=ts(df_dollars_1$coredata.df_d_1.,start=c(2005,2),freq=12)
@@ -537,6 +543,8 @@ summary(gls_log_d3)
 gls_log_d4 = gls(dollars_4_adj_dlog~gls_dollars_recession_dummy)
 summary(gls_log_d4)
 
+####CHANGE THIS SECTION TO USE TSLM#####
+
 
 
 ```
@@ -546,31 +554,45 @@ summary(gls_log_d4)
 #comment out for now, cuz takes too long to process
 
 
-analyze word usages
+<!-- analyze word usages -->
+<!-- ```{r} -->
+
+<!-- buildCorpus = function(data, stem){ -->
+<!--   corpus = Corpus(VectorSource(data)) -->
+<!--   corpus = tm_map(corpus, content_transformer(tolower)) -->
+<!--   corpus = tm_map(corpus, PlainTextDocument) -->
+<!--   corpus = tm_map(corpus, removePunctuation) -->
+<!--   corpus = tm_map(corpus, removeWords, stopWords) -->
+<!--   if(stem==1) corpus = tm_map(corpus, stemDocument) -->
+<!--   return(corpus) -->
+<!-- } -->
+
+<!-- buildWordCloud = function(corpus, pal,val, name){ -->
+<!--   wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name) -->
+<!-- } -->
+<!-- stopWords = removePunctuation(stopwords('SMART')) -->
+
+<!-- head(restaurant_reviews) -->
+<!-- restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ]) -->
+
+<!-- restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ]) -->
+
+<!-- #create corupses -->
+<!-- corpus_reviews_rec = buildCorpus(restaurant_reviews_rec$text,0) -->
+<!-- #corpus_reviews_norec = buildCorpus(restaurant_reviews_norec$text,0) -->
+
+
+
+<!-- #buildWordCloud(corpus_reviews_rec, "Spectral",8,0, "test") -->
+<!-- #buildWordCloud(corpus_reviews_norec, "Spectral",8,0, "test2") -->
+
+
+<!-- ``` -->
+
+
 ```{r}
 
-buildWordCloud = function(data, pal,val,stem, name){
-  corpus = Corpus(VectorSource(data))
-  corpus = tm_map(corpus, content_transformer(tolower))
-  corpus = tm_map(corpus, PlainTextDocument)
-  corpus = tm_map(corpus, removePunctuation)
-  corpus = tm_map(corpus, removeWords, stopWords)
-  if(stem==1) corpus = tm_map(corpus, stemDocument)
-  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
-}
-stopWords = removePunctuation(stopwords('SMART'))
-
-head(restaurant_reviews)
-restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ])
-
-restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ])
-
-buildWordCloud(restaurant_reviews_rec$text, "Spectral",8,0, "test")
-buildWordCloud(restaurant_reviews_norec$text, "Spectral",8,0, "test2")
-
-
 ```
-
 
 
 #connect with restaurants
@@ -602,12 +624,12 @@ plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l")
 #create var + granger causality for real exp and gdp
 gdp_exp_combined = cbind(rest_real_exp_diff_log,gdp_growth_subset)
 select=VARselect(gdp_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_gdp_exp=VAR(gdp_exp_combined,p=4)
+vm_gdp_exp=VAR(gdp_exp_combined,select$select[1])
 plot(vm_gdp_exp$y)
 summary(vm_gdp_exp)
 
-grangertest(rest_real_exp_diff_log~gdp_growth_subset[1:length(gdp_growth_subset)])
-grangertest(gdp_growth_subset[1:length(gdp_growth_subset)]~rest_real_exp_diff_log)
+grangertest(rest_real_exp_diff_log~gdp_growth_subset[1:length(gdp_growth_subset)],order=select$select[1])
+grangertest(gdp_growth_subset[1:length(gdp_growth_subset)]~rest_real_exp_diff_log,order=select$select[1])
 
 rec_exp_diff_log_dummy = add_recession_dummy(rest_exp_dates_diff)
 gls_rest_real_exp_diff_log = gls(rest_real_exp_diff_log~rec_exp_diff_log_dummy)
@@ -615,62 +637,113 @@ summary(gls_rest_real_exp_diff_log)
 
 ```
 
-yes gdp granger causes restaurant expenditures + recession dummy :O
+yes gdp granger causes restaurant expenditures and recession dummy
 
 
 
 #connect reviews with restaurants
-cuz #reviews to gdp is a far stretch
+
 
 ```{r}
 
 rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
 select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_rev_exp=VAR(rev_exp_combined,p=4)
+vm_rev_exp=VAR(rev_exp_combined,select$select[1])
 plot(vm_rev_exp$y)
 summary(vm_rev_exp)
 
-grangertest(rest_real_exp_diff_log~log_rev_quarter)
-grangertest(log_rev_quarter~rest_real_exp_diff_log)
-#no granger causality
+grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
+grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
 
-grangertest(log_rev_quarter~gdp_growth_subset)
-
-grangertest(log_rev_quarter~rec_dummy_rev_growth_q)
-
+#looks like log_rev_quarter is granger caused by rest_real_exp_diff_log
 log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
 summary(log_rev_exp_gls)
+plot(log_rev_exp_gls$fitted,type="l")
+plot(log_rev_quarter)
+
+temp = tslm(log_rev_quarter~trend+season)
+seasonaly_adj_log_rev=temp$residuals
+
+reg_seasonaly_adj_log_rev = gls(seasonaly_adj_log_rev~rec_dummy_rev_growth_q)
+summary(reg_seasonaly_adj_log_rev)
+
+
+
+
+#IS RECESSION AN IV?!
+
+
+#two stage regression
+stage1 = gls(rest_real_exp_diff_log~rec_dummy_rev_growth_q)
+summary(stage1)
+stage1_resid = resid(stage1)
+
+stage2=gls(seasonaly_adj_log_rev~stage1_resid)
+summary(stage2)
+
+#what am i doing....?
+
+
+# #no granger causality
+# 
+# grangertest(log_rev_quarter~gdp_growth_subset)
+# 
+# grangertest(log_rev_quarter~rec_dummy_rev_growth_q)
+# 
+# log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
+# summary(log_rev_exp_gls)
+# 
+# testing = tslm(log_rev_quarter~trend+season)
+# summary(testing)
+# 
+# temp=testing$residuals
+# 
+# reg_Test = gls(temp~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
+# summary(reg_Test)
+# 
+# rev_exp_combined = cbind(rest_real_exp_diff_log,temp)
+# select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+# vm_rev_exp=VAR(rev_exp_combined,select$select[1])
+# plot(vm_rev_exp$y)
+# summary(vm_rev_exp)
+# 
+# grangertest(rest_real_exp_diff_log~temp,order=select$select[1])
+# grangertest(temp~rest_real_exp_diff_log,order=select$select[1])
+# 
+# 
+# plot(vm_rev_exp$y[,1])
+# lines(vm_rev_exp$y[,2],col="red")
 
 
 ```
 
 
 
-#seasonally adjust log reviews by quarter
+<!-- #seasonally adjust log reviews by quarter -->
 
-```{r}
-decompose_log_rev_quarter=decompose(log_rev_quarter,"additive")
-log_rev_quarter_adj=log_rev_quarter-decompose_log_rev_quarter$seasonal
-plot(log_rev_quarter_adj)
-
-
-rev_adj_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj)
-select=VARselect(rev_adj_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_rev_adj_exp=VAR(rev_adj_exp_combined,p=4)
-plot(vm_rev_adj_exp$y)
-summary(vm_rev_adj_exp)
+<!-- ```{r} -->
+<!-- decompose_log_rev_quarter=decompose(log_rev_quarter,"additive") -->
+<!-- log_rev_quarter_adj=log_rev_quarter-decompose_log_rev_quarter$seasonal -->
+<!-- plot(log_rev_quarter_adj) -->
 
 
-gls_rev_adj=gls(log_rev_quarter_adj~rec_dummy_rev_growth_q)
-summary(gls_rev_adj)
+<!-- rev_adj_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj) -->
+<!-- select=VARselect(rev_adj_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL) -->
+<!-- vm_rev_adj_exp=VAR(rev_adj_exp_combined,select$select[1]) -->
+<!-- plot(vm_rev_adj_exp$y) -->
+<!-- summary(vm_rev_adj_exp) -->
 
-log_rev_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
-summary(log_rev_gls)
+
+<!-- gls_rev_adj=gls(log_rev_quarter_adj~rec_dummy_rev_growth_q) -->
+<!-- summary(gls_rev_adj) -->
+
+<!-- log_rev_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log) -->
+<!-- summary(log_rev_gls) -->
 
 
-log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log+rest_real_exp_diff_log)
-summary(log_rev_exp_gls)
-```
+<!-- log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log+rest_real_exp_diff_log) -->
+<!-- summary(log_rev_exp_gls) -->
+<!-- ``` -->
 
 yelpers are not representative of overall restaurant goers, but are still effected by the recession
 
