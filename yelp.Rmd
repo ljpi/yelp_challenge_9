@@ -7,7 +7,7 @@ output:
   html_document: default
 ---
 
-```{r}
+```{r, include=FALSE}
 library(jsonlite)
 library('vars')
 library('readxl')
@@ -30,6 +30,10 @@ library(tm)
 library(SnowballC)
 library(wordcloud)
 library(nlme)
+library(tidyr)
+library(dplyr)
+library(tidytext)
+library(ggplot2)
 ```
 
 ```{r setup, include=FALSE}
@@ -67,6 +71,9 @@ bea
 
 
 
+
+#Motivation
+If restaurant Yelpers' behavior during and aroud The Great Recession period can be modeled and connected with restaurant expenditures, then there can be conclusions about Yelpers' behavior. If recessionary behavior can be understood, then restaurants can react accordingly.
 
 
 ```{r}
@@ -123,7 +130,7 @@ add_recession_dummy = function(l){
 ```
 
 #user data
-```{r}
+```{r, include=FALSE, message=FALSE}
 user = load_json("yelp_academic_dataset_user.json")
 colnames(user)
 subset_users = user[4]
@@ -139,19 +146,18 @@ ts_m = apply.monthly(users_by_date_xts, sum)
 
 ts_m
 
-# users_by_date=sqldf("delete from users_by_date where yelping_since < '2012-03-02' ")
-# head(users_by_date)
-#ts_users = as.ts(users_by_date$`count(yelping_since)`, start = c(2004,10,12), end = c(2017,1,20), frequency=1)
 
 users_df = data.frame(date=index(ts_m), coredata(ts_m))
 users_df
 
 stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
+```
 
+```{r}
 plot(stock_users,type="l")
 
 yelp_stock = get.hist.quote("YELP",end="2017-01-30",quote="AdjClose",compression="m")
-yelp_stock
+# yelp_stock
 
 plot(yelp_stock)
 
@@ -167,8 +173,8 @@ log_user_growth = as.data.frame(diff(log(stock_users$coredata.ts_m.)))
 
 log_yelp_growth = as.data.frame(diff(log(yelp_stock)))
 
-log_user_growth
-log_yelp_growth
+# log_user_growth
+# log_yelp_growth
 
 
 
@@ -182,18 +188,28 @@ test_stationary(ts_yelp)
 plot(ts_users,col="blue")
 lines(ts_yelp,col="red")
 
+combined = cbind(ts_yelp,ts_users)
+select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm=VAR(combined,p=select$select[1])
+plot(vm$y)
+summary(vm)
+
+grangertest(ts_users~ts_yelp)
+
+
+
 sp500 = get.hist.quote("^GSPC",quote="AdjClose",compression="m",start=as.Date("2012-03-01","%Y-%m-%d"),end=as.Date("2017-01-30","%Y-%m-%d"))
 
-sp500
+# sp500
 test_stationary(sp500)
 
 log_sp500_growth = as.data.frame(diff(log(sp500)))
 ts_sp500 = ts(log_sp500_growth,start=c(2012,4),freq=12)
-ts_sp500
+# ts_sp500
 test_stationary(ts_sp500)
 
-ts_yelp
-ts_sp500
+# ts_yelp
+# ts_sp500
 
 
 plot(ts_users,col="blue")
@@ -203,11 +219,12 @@ combined = cbind(ts_yelp,ts_sp500)
 
 select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 
-vm=VAR(combined,p=12)
+vm=VAR(combined,p=select$select[1])
 
 plot(vm$y)
 
 summary(vm)
+
 
 
 ```
@@ -218,7 +235,7 @@ should i examine review scores + users + etc and its relation to s and p500 duri
 
 #review scores and gdp
 
-```{r}
+```{r, include=FALSE, message=FALSE}
 
 review = load_json("yelp_academic_dataset_review.json")
 
@@ -249,29 +266,32 @@ colnames(review_date_star)=c("date","stars")
 
 review_date_star$date=as.Date(review_date_star$date,"%Y-%m-%d")
 
-#freq
+#freq of new reviews
 review_counts_by_date = sqldf("select date, count(date) from review_date_star group by date order by date")
 
 head(review_counts_by_date)
 
+```
+
+```{r}
 plot(review_counts_by_date$date,review_counts_by_date$`count(date)`,type="l")
 
 #convert to monthly
 reviews_by_date=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
-ts_rev_m = apply.monthly(reviews_by_date, sum)
-ts_rev_count = data.frame(date=index(ts_rev_m), coredata(ts_rev_m))
-ts_rev_count
+df_rev_m = apply.monthly(reviews_by_date, sum)
+df_rev_count = data.frame(date=index(df_rev_m), coredata(df_rev_m))
+# df_rev_count
 
-plot(ts_rev_count$date,ts_rev_count$coredata.ts_rev_m.,type="l")
+plot(df_rev_count$date,df_rev_count$coredata.df_rev_m.,type="l")
 
 
 #review growth rates/new user growth rates
-log_rev_count=diff(log(ts_rev_count$coredata.ts_rev_m.))
+log_rev_count=diff(log(df_rev_count$coredata.df_rev_m.))
 #log_rev_count[1]=NA
 log_rev_count = na.omit(log_rev_count)
 log_rev_count = ts(log_rev_count,start=c(2006,2),freq=12)
 
-ts_m
+# ts_m
 log_user_count=diff(log(ts_m[,1]))
 log_user_count = na.omit(log_user_count)
 log_user_count = ts(log_user_count,start=c(2006,2),freq=12)
@@ -292,66 +312,94 @@ summary(vm_rates)
 grangertest(log_rev_count~log_user_count,order=select$select[1])
 grangertest(log_user_count~log_rev_count,order=select$select[1])
 
-user_rev_gls=gls(log_rev_count~log_user_count)
-summary(user_rev_gls)
+user_rev_lm=lm(log_rev_count~log_user_count)
+summary(user_rev_lm)
+
+#users and review#s granger cause each other, just use one
 
 #stars by month
 stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
-ts_stars_m = apply.monthly(stars_by_date, sum)
-ts_stars = data.frame(date=index(ts_stars_m), coredata(ts_stars_m))
+df_stars_m = apply.monthly(stars_by_date, sum)
+df_stars = data.frame(date=index(df_stars_m), coredata(df_stars_m))
 
 
-ts_stars$avg = ts_stars$coredata.ts_stars_m./ts_rev_count$coredata.ts_rev_m.
-head(ts_stars)
+df_stars$avg = df_stars$coredata.df_stars_m./df_rev_count$coredata.df_rev_m.
+# head(df_stars)
 
-plot(ts_stars$date,ts_stars$avg,type = "l")
+plot(df_stars$date,df_stars$avg,type = "l")
 #evidence of recession in stars
-stars_recession_dummy = add_recession_dummy(ts_stars$date)
-stars_avg=ts_stars$avg
-stars_gls=gls(stars_avg~stars_recession_dummy)
-summary(stars_gls)
+stars_recession_dummy = add_recession_dummy(df_stars$date)
+stars_avg=df_stars$avg
+stars_lm=lm(stars_avg~stars_recession_dummy)
+summary(stars_lm)
 
 
 
-test_stationary(ts_stars$avg)
+test_stationary(df_stars$avg)
 #convert to growth rates
-ts_stars_diff_log = as.data.frame(diff(log(ts_stars$avg)))
-ts_stars_diff_log$date=ts_stars$date[2:length(ts_stars$date)]
+df_stars_diff_log = as.data.frame(diff(log(df_stars$avg)))
+df_stars_diff_log$date=df_stars$date[2:length(df_stars$date)]
 
-ts_stars_diff_log
-colnames(ts_stars_diff_log)=c("avg","date")
+df_stars_diff_log
+colnames(df_stars_diff_log)=c("avg","date")
 
-test_stationary(ts_stars_diff_log$avg)
+test_stationary(df_stars_diff_log$avg)
 
 
-stars_recession_diff_log_dummy = add_recession_dummy(ts_stars_diff_log$date)
+stars_recession_diff_log_dummy = add_recession_dummy(df_stars_diff_log$date)
 
-# stars_reg = lm(ts_stars_diff_log$avg ~ stars_recession_diff_log_dummy)
+# stars_reg = lm(df_stars_diff_log$avg ~ stars_recession_diff_log_dummy)
 # summary(stars_reg)
 
-plot(ts_stars_diff_log$date,ts_stars_diff_log$avg,type="l")
+plot(df_stars_diff_log$date,df_stars_diff_log$avg,type="l")
 
-stars_diff_log_avg = ts_stars_diff_log$avg
-stars_diff_log_gls = gls(stars_diff_log_avg~stars_recession_diff_log_dummy)
-summary(stars_diff_log_gls)
+stars_diff_log_avg = df_stars_diff_log$avg
+stars_diff_log_lm = lm(stars_diff_log_avg~stars_recession_diff_log_dummy)
+summary(stars_diff_log_lm)
+
+
+#however, intuitively we should be looking at level, not growth rates
+#so lets detrend the data and season
+
+ts_stars = ts(df_stars$avg,start=c(2006,2),freq=12)
+
+stars_tslm = tslm(ts_stars~trend+season)
+summary(stars_tslm)
+
+plot(ts_stars)
+lines(stars_tslm$fitted.values,col="red")
+
+detrend_stars = resid(stars_tslm)
+plot(detrend_stars)
+
+detrend_stars_lm=lm(detrend_stars~stars_recession_dummy)
+summary(detrend_stars_lm)
+
+
+
 
 ```
 
 the growth rates plot shows that even during recession we don't see a dip in either. if there was constant account creation but a dip in reviews, that would mean the recession has an effect on num of reviews
 
+
+
+
+
+
 #descriptive stats of reviews and stars
 
 ```{r}
-sd(ts_rev_count$coredata.ts_rev_m.)
-mean(ts_rev_count$coredata.ts_rev_m.)
+sd(df_rev_count$coredata.df_rev_m.)
+mean(df_rev_count$coredata.df_rev_m.)
 
 
 sd(log_rev_count)
 mean(log_rev_count)
 
 
-sd(ts_stars$avg)
-mean(ts_stars$avg)
+sd(df_stars$avg)
+mean(df_stars$avg)
 
 ```
 
@@ -376,18 +424,18 @@ plot(gdp_growth_subset)
 
 #create quarterly review growth rate
 reviews_by_quarter=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
-ts_rev_m_quarter = apply.quarterly(reviews_by_quarter, sum)
-ts_rev_quarter = data.frame(date=index(ts_rev_m_quarter), coredata(ts_rev_m_quarter))
-ts_rev_quarter
-plot(ts_rev_quarter$date,ts_rev_quarter$coredata.ts_rev_m_quarter.,type="l")
+df_rev_m_quarter = apply.quarterly(reviews_by_quarter, sum)
+df_rev_quarter = data.frame(date=index(df_rev_m_quarter), coredata(df_rev_m_quarter))
+# df_rev_quarter
+plot(df_rev_quarter$date,df_rev_quarter$coredata.df_rev_m_quarter.,type="l")
 
-log_rev_quarter=diff(log(ts_rev_quarter$coredata.ts_rev_m_quarter.))
+log_rev_quarter=diff(log(df_rev_quarter$coredata.df_rev_m_quarter.))
 log_rev_quarter = na.omit(log_rev_quarter)
 log_rev_quarter = ts(log_rev_quarter,start=c(2006,2),freq=4)
 plot(log_rev_quarter,type="l")
 
-length(log_rev_quarter)
-length(gdp_growth_subset)
+# length(log_rev_quarter)
+# length(gdp_growth_subset)
 
 #var of gdp and user reviews growth rates
 gdp_combined = cbind(log_rev_quarter,gdp_growth_subset)
@@ -398,9 +446,9 @@ summary(vm_gdp)
 
 #do a var on quarterly gdp growth and quarterly avg review score
 
-recession_dummy_reviews_q = add_recession_dummy(ts_rev_quarter$date)
+recession_dummy_reviews_q = add_recession_dummy(df_rev_quarter$date)
 
-reg_reviews = lm(ts_rev_quarter$coredata.ts_rev_m_quarter.~recession_dummy_reviews_q)
+reg_reviews = lm(df_rev_quarter$coredata.df_rev_m_quarter.~recession_dummy_reviews_q)
 summary(reg_reviews)
 #first reg is misleading
 
@@ -413,9 +461,9 @@ rec_dummy_rev_growth_q = recession_dummy_reviews_q[2:length(recession_dummy_revi
 reg_log_reviews = lm(log_rev_quarter~rec_dummy_rev_growth_q)
 summary(reg_log_reviews)
 
-#use gls
-log_reviews_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q)
-summary(log_reviews_gls)
+#use lm
+log_reviews_lm = lm(log_rev_quarter~rec_dummy_rev_growth_q)
+summary(log_reviews_lm)
 
 ```
 
@@ -424,15 +472,11 @@ summary(log_reviews_gls)
 
 #examine social dynamics during recessions through dollar signs as well as review texts
 do people eat at cheaper places? do people care more about overpriced food?
-```{r}
-
-####CHANGE THIS SECTION TO USE TSLM#####
-
-
+```{r, include=FALSE, message=FALSE}
 #convert $ dollar signs to time series
-restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
+restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes, restaurant_reviews.stars from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
 
-#create a dollar sign extractor
+#dollar sign extractor
 get_dollar_signs=function(s){
   temp=str_extract(s,"RestaurantsPriceRange2(.*?)[0-9]")
   return(substr(temp,nchar(temp),nchar(temp)))
@@ -457,25 +501,29 @@ dollars_gbd_2 = sqldf("select date, count(date) from dollars_2 group by date ord
 dollars_gbd_3 = sqldf("select date, count(date) from dollars_3 group by date order by date")
 dollars_gbd_4 = sqldf("select date, count(date) from dollars_4 group by date order by date")
 
+```
+
+```{r}
+
 dollars_1_xts=xts(dollars_gbd_1$`count(date)`, as.Date(dollars_gbd_1$date,"%Y-%m-%d"))
 df_d_1 = apply.monthly(dollars_1_xts, sum)
 df_dollars_1 = data.frame(date=index(df_d_1), coredata(df_d_1))
-df_dollars_1
+# df_dollars_1
 
 dollars_2_xts=xts(dollars_gbd_2$`count(date)`, as.Date(dollars_gbd_2$date,"%Y-%m-%d"))
 df_d_2 = apply.monthly(dollars_2_xts, sum)
 df_dollars_2 = data.frame(date=index(df_d_2), coredata(df_d_2))
-df_dollars_2
+# df_dollars_2
 
 dollars_3_xts=xts(dollars_gbd_3$`count(date)`, as.Date(dollars_gbd_3$date,"%Y-%m-%d"))
 df_d_3 = apply.monthly(dollars_3_xts, sum)
 df_dollars_3 = data.frame(date=index(df_d_3), coredata(df_d_3))
-df_dollars_3
+# df_dollars_3
 
 dollars_4_xts=xts(dollars_gbd_4$`count(date)`, as.Date(dollars_gbd_4$date,"%Y-%m-%d"))
 df_d_4 = apply.monthly(dollars_4_xts, sum)
 df_dollars_4 = data.frame(date=index(df_d_4), coredata(df_d_4))
-df_dollars_4
+# df_dollars_4
 
 
 recession_dummy_dollars_m = add_recession_dummy(df_dollars_1$date)
@@ -486,121 +534,346 @@ plot(df_dollars_2,type="l")
 plot(df_dollars_3,type="l")
 plot(df_dollars_4,type="l")
 
+```
 
+```{r}
 df_dollars_1_dlog = as.data.frame(diff(log(df_dollars_1$coredata.df_d_1.)))
 df_dollars_2_dlog = as.data.frame(diff(log(df_dollars_2$coredata.df_d_2.)))
 df_dollars_3_dlog = as.data.frame(diff(log(df_dollars_3$coredata.df_d_3.)))
 df_dollars_4_dlog = as.data.frame(diff(log(df_dollars_4$coredata.df_d_4.)))
 
 
-plot(df_dollars_1$date[2:length(df_dollars_1$date)],df_dollars_1_dlog$`diff(log(df_dollars_1$coredata.df_d_1.))`,type="l")
-plot(df_dollars_2$date[2:length(df_dollars_2$date)],df_dollars_2_dlog$`diff(log(df_dollars_2$coredata.df_d_2.))`,type="l")
-plot(df_dollars_3$date[2:length(df_dollars_3$date)],df_dollars_3_dlog$`diff(log(df_dollars_3$coredata.df_d_3.))`,type="l")
-plot(df_dollars_4$date[2:length(df_dollars_4$date)],df_dollars_4_dlog$`diff(log(df_dollars_4$coredata.df_d_4.))`,type="l")
+#ts of dlogs
+ts_dollar_1=ts(df_dollars_1$coredata.df_d_1.,start=c(2006,2),freq=12)
+ts_dollar_2=ts(df_dollars_2$coredata.df_d_2.,start=c(2006,2),freq=12)
+ts_dollar_3=ts(df_dollars_3$coredata.df_d_3.,start=c(2006,2),freq=12)
+ts_dollar_4=ts(df_dollars_4$coredata.df_d_4.,start=c(2006,2),freq=12)
 
 
+dollars_1_dlog=diff(log(ts_dollar_1))
+dollars_2_dlog=diff(log(ts_dollar_2))
+dollars_3_dlog=diff(log(ts_dollar_3))
+dollars_4_dlog=diff(log(ts_dollar_4))
+
+plot(dollars_1_dlog)
+plot(dollars_2_dlog)
+plot(dollars_3_dlog)
+plot(dollars_4_dlog)
+
+lm_dollars_recession_dummy = recession_dummy_dollars_m[2:length(recession_dummy_dollars_m)]
+
+```
 
 #seasonally adjust the data
 
-ts_dollar_1=ts(df_dollars_1$coredata.df_d_1.,start=c(2005,2),freq=12)
-decompose_ts_dollar_1=decompose(ts_dollar_1,"multiplicative")
-dollar_1_adj = ts_dollar_1/decompose_ts_dollar_1$seasonal
-plot(dollar_1_adj)
+```{r}
 
-ts_dollar_2=ts(df_dollars_2$coredata.df_d_2.,start=c(2005,2),freq=12)
-decompose_ts_dollar_2=decompose(ts_dollar_2,"multiplicative")
-dollar_2_adj = ts_dollar_2/decompose_ts_dollar_2$seasonal
-plot(dollar_2_adj)
+#seasonally adjust data
 
-ts_dollar_3=ts(df_dollars_3$coredata.df_d_3.,start=c(2005,2),freq=12)
-decompose_ts_dollar_3=decompose(ts_dollar_3,"multiplicative")
-dollar_3_adj = ts_dollar_3/decompose_ts_dollar_3$seasonal
-plot(dollar_3_adj)
+#levels
+tslm_d1 = tslm(ts_dollar_1~trend+season)
+#summary(tslm_d1)
+tslm_d1_resid = resid(tslm_d1)
+plot(tslm_d1_resid)
+lm_d1_adj = lm(tslm_d1_resid~recession_dummy_dollars_m)
+summary(lm_d1_adj)
 
-ts_dollar_4=ts(df_dollars_4$coredata.df_d_4.,start=c(2005,2),freq=12)
-decompose_ts_dollar_4=decompose(ts_dollar_4,"multiplicative")
-dollar_4_adj = ts_dollar_4/decompose_ts_dollar_4$seasonal
-plot(dollar_4_adj)
+tslm_d2 = tslm(ts_dollar_2~trend+season)
+#summary(tslm_d1)
+tslm_d2_resid = resid(tslm_d2)
+plot(tslm_d2_resid)
+lm_d2_adj = lm(tslm_d2_resid~recession_dummy_dollars_m)
+summary(lm_d2_adj)
 
-dollars_1_adj_dlog=diff(log(dollar_1_adj))
-dollars_2_adj_dlog=diff(log(dollar_2_adj))
-dollars_3_adj_dlog=diff(log(dollar_3_adj))
-dollars_4_adj_dlog=diff(log(dollar_4_adj))
+tslm_d3 = tslm(ts_dollar_3~trend+season)
+#summary(tslm_d1)
+tslm_d3_resid = resid(tslm_d3)
+plot(tslm_d3_resid)
+lm_d3_adj = lm(tslm_d3_resid~recession_dummy_dollars_m)
+summary(lm_d3_adj)
 
-plot(dollars_1_adj_dlog)
-plot(dollars_2_adj_dlog)
-plot(dollars_3_adj_dlog)
-plot(dollars_4_adj_dlog)
+tslm_d4 = tslm(ts_dollar_4~trend+season)
+#summary(tslm_d1)
+tslm_d4_resid = resid(tslm_d4)
+plot(tslm_d4_resid)
+lm_d4_adj = lm(tslm_d4_resid~recession_dummy_dollars_m)
+summary(lm_d4_adj)
 
-gls_dollars_recession_dummy = recession_dummy_dollars_m[2:length(recession_dummy_dollars_m)]
+```
 
-gls_log_d1 = gls(dollars_1_adj_dlog~gls_dollars_recession_dummy)
-summary(gls_log_d1)
-gls_log_d2 = gls(dollars_2_adj_dlog~gls_dollars_recession_dummy)
-summary(gls_log_d2)
-gls_log_d3 = gls(dollars_3_adj_dlog~gls_dollars_recession_dummy)
-summary(gls_log_d3)
-gls_log_d4 = gls(dollars_4_adj_dlog~gls_dollars_recession_dummy)
-summary(gls_log_d4)
+```{r}
 
-####CHANGE THIS SECTION TO USE TSLM#####
 
+#growth
+tslm_d1_growth = tslm(dollars_1_dlog~trend+season)
+#summary(tslm_d1)
+tslm_d1_growth_resid = resid(tslm_d1_growth)
+plot(tslm_d1_growth_resid)
+lm_d1_growth_adj = lm(tslm_d1_growth_resid~lm_dollars_recession_dummy)
+summary(lm_d1_growth_adj)
+
+tslm_d2_growth = tslm(dollars_2_dlog~trend+season)
+#summary(tslm_d1)
+tslm_d2_growth_resid = resid(tslm_d2_growth)
+plot(tslm_d2_growth_resid)
+lm_d2_growth_adj = lm(tslm_d2_growth_resid~lm_dollars_recession_dummy)
+summary(lm_d2_growth_adj)
+
+tslm_d3_growth = tslm(dollars_3_dlog~trend+season)
+#summary(tslm_d1)
+tslm_d3_growth_resid = resid(tslm_d3_growth)
+plot(tslm_d3_growth_resid)
+lm_d3_growth_adj = lm(tslm_d3_growth_resid~lm_dollars_recession_dummy)
+summary(lm_d3_growth_adj)
+
+tslm_d4_growth = tslm(dollars_4_dlog~trend+season)
+#summary(tslm_d1)
+tslm_d4_growth_resid = resid(tslm_d4_growth)
+plot(tslm_d4_growth_resid)
+lm_d4_growth_adj = lm(tslm_d4_growth_resid~lm_dollars_recession_dummy)
+summary(lm_d4_growth_adj)
+
+```
+
+```{r}
+
+#percentages
+ts_dollar_total = ts_dollar_1+ts_dollar_2+ts_dollar_3+ts_dollar_4
+ts_d1_per = ts_dollar_1/ts_dollar_total
+ts_d2_per = ts_dollar_2/ts_dollar_total
+ts_d3_per = ts_dollar_3/ts_dollar_total
+ts_d4_per = ts_dollar_4/ts_dollar_total
+
+plot(ts_d1_per)
+plot(ts_d2_per)
+plot(ts_d3_per)
+plot(ts_d4_per)
+
+tslm_d1_per = tslm(ts_d1_per~trend+season)
+tslm_d1_per_resid = resid(tslm_d1_per)
+plot(tslm_d1_per_resid)
+lm_d1_per_adj = lm(tslm_d1_per_resid~recession_dummy_dollars_m)
+summary(lm_d1_per_adj)
+
+tslm_d2_per = tslm(ts_d2_per~trend+season)
+tslm_d2_per_resid = resid(tslm_d2_per)
+plot(tslm_d2_per_resid)
+lm_d2_per_adj = lm(tslm_d2_per_resid~recession_dummy_dollars_m)
+summary(lm_d2_per_adj)
+
+tslm_d3_per = tslm(ts_d3_per~trend+season)
+tslm_d3_per_resid = resid(tslm_d3_per)
+plot(tslm_d3_per_resid)
+lm_d3_per_adj = lm(tslm_d3_per_resid~recession_dummy_dollars_m)
+summary(lm_d3_per_adj)
+
+tslm_d4_per = tslm(ts_d4_per~trend+season)
+tslm_d4_per_resid = resid(tslm_d4_per)
+plot(tslm_d4_per_resid)
+lm_d4_per_adj = lm(tslm_d4_per_resid~recession_dummy_dollars_m)
+summary(lm_d4_per_adj)
 
 
 ```
 
+#introduce num of reviews into model
+control for number of new reviews, to make sure that the recession dummy doesn't accidentally capture an effect from new review numbers, in other words if the number of reviews dropped it would make sense that the number of reviews for a certain amount of dollar signs drops too
+
+```{r}
+#levels
+lm_d1_adj_rev = lm(tslm_d1_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
+summary(lm_d1_adj_rev)
+
+lm_d2_adj_rev = lm(tslm_d2_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
+summary(lm_d2_adj_rev)
+
+lm_d3_adj_rev = lm(tslm_d3_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
+summary(lm_d3_adj_rev)
+
+lm_d4_adj_rev = lm(tslm_d4_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
+summary(lm_d4_adj_rev)
+
+
+```
+
+
+#re examine stars, but subset by dollar signs
+
+```{r, include=FALSE, message=FALSE}
+
+stars_by_restaurant_dollars = data.frame(restaurant_visits$date)
+stars_by_restaurant_dollars$dollars = get_dollar_signs(restaurant_visits$attributes)
+stars_by_restaurant_dollars$stars = restaurant_visits$stars
+
+stars_by_restaurant_dollars=na.omit(stars_by_restaurant_dollars)
+stars_by_restaurant_dollars$restaurant_visits.date=as.character(stars_by_restaurant_dollars$restaurant_visits.date)
+colnames(stars_by_restaurant_dollars) = c("date","dollars","stars")
+
+dollars_1_star = sqldf("select * from stars_by_restaurant_dollars where dollars=1")
+dollars_2_star = sqldf("select * from stars_by_restaurant_dollars where dollars=2")
+dollars_3_star = sqldf("select * from stars_by_restaurant_dollars where dollars=3")
+dollars_4_star = sqldf("select * from stars_by_restaurant_dollars where dollars=4")
+
+dollars_obd_1_star = sqldf("select date, stars from dollars_1_star order by date")
+dollars_obd_2_star = sqldf("select date, stars from dollars_2_star order by date")
+dollars_obd_3_star = sqldf("select date, stars from dollars_3_star order by date")
+dollars_obd_4_star = sqldf("select date, stars from dollars_4_star order by date")
+  
+```
+
+```{r}
+
+dollars_1_star_xts=xts(dollars_obd_1_star$stars, as.Date(dollars_obd_1_star$date,"%Y-%m-%d"))
+df_d_1_star = apply.monthly(dollars_1_star_xts, sum)
+df_dollars_1_star = data.frame(date=index(df_d_1_star), coredata(df_d_1_star))
+df_dollars_1_star$avg = df_dollars_1_star$coredata.df_d_1_star./df_dollars_1$coredata.df_d_1.
+plot(df_dollars_1_star$date,df_dollars_1_star$avg)
+d1_star_lm = lm(df_dollars_1_star$avg~recession_dummy_dollars_m)
+summary(d1_star_lm)
+
+dollars_2_star_xts=xts(dollars_obd_2_star$stars, as.Date(dollars_obd_2_star$date,"%Y-%m-%d"))
+df_d_2_star = apply.monthly(dollars_2_star_xts, sum)
+df_dollars_2_star = data.frame(date=index(df_d_2_star), coredata(df_d_2_star))
+df_dollars_2_star$avg = df_dollars_2_star$coredata.df_d_2_star./df_dollars_2$coredata.df_d_2.
+plot(df_dollars_2_star$date,df_dollars_2_star$avg)
+d2_star_lm = lm(df_dollars_2_star$avg~recession_dummy_dollars_m)
+summary(d2_star_lm)
+
+dollars_3_star_xts=xts(dollars_obd_3_star$stars, as.Date(dollars_obd_3_star$date,"%Y-%m-%d"))
+df_d_3_star = apply.monthly(dollars_3_star_xts, sum)
+df_dollars_3_star = data.frame(date=index(df_d_3_star), coredata(df_d_3_star))
+df_dollars_3_star$avg = df_dollars_3_star$coredata.df_d_3_star./df_dollars_3$coredata.df_d_3.
+plot(df_dollars_3_star$date,df_dollars_3_star$avg)
+d3_star_lm = lm(df_dollars_3_star$avg~recession_dummy_dollars_m)
+summary(d3_star_lm)
+
+dollars_4_star_xts=xts(dollars_obd_4_star$stars, as.Date(dollars_obd_4_star$date,"%Y-%m-%d"))
+df_d_4_star = apply.monthly(dollars_4_star_xts, sum)
+df_dollars_4_star = data.frame(date=index(df_d_4_star), coredata(df_d_4_star))
+df_dollars_4_star$avg = df_dollars_4_star$coredata.df_d_4_star./df_dollars_4$coredata.df_d_4.
+plot(df_dollars_4_star$date,df_dollars_4_star$avg)
+d4_star_lm = lm(df_dollars_4_star$avg~recession_dummy_dollars_m)
+summary(d4_star_lm)
+
+#looks like the stars dropping during a recession was only in 1 and 2 dollar signs restaurants
+
+```
 
 
 #comment out for now, cuz takes too long to process
 
 
-<!-- analyze word usages -->
-<!-- ```{r} -->
-
-<!-- buildCorpus = function(data, stem){ -->
-<!--   corpus = Corpus(VectorSource(data)) -->
-<!--   corpus = tm_map(corpus, content_transformer(tolower)) -->
-<!--   corpus = tm_map(corpus, PlainTextDocument) -->
-<!--   corpus = tm_map(corpus, removePunctuation) -->
-<!--   corpus = tm_map(corpus, removeWords, stopWords) -->
-<!--   if(stem==1) corpus = tm_map(corpus, stemDocument) -->
-<!--   return(corpus) -->
-<!-- } -->
-
-<!-- buildWordCloud = function(corpus, pal,val, name){ -->
-<!--   wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name) -->
-<!-- } -->
-<!-- stopWords = removePunctuation(stopwords('SMART')) -->
-
-<!-- head(restaurant_reviews) -->
-<!-- restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ]) -->
-
-<!-- restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ]) -->
-
-<!-- #create corupses -->
-<!-- corpus_reviews_rec = buildCorpus(restaurant_reviews_rec$text,0) -->
-<!-- #corpus_reviews_norec = buildCorpus(restaurant_reviews_norec$text,0) -->
-
-
-
-<!-- #buildWordCloud(corpus_reviews_rec, "Spectral",8,0, "test") -->
-<!-- #buildWordCloud(corpus_reviews_norec, "Spectral",8,0, "test2") -->
-
-
-<!-- ``` -->
-
-
+analyze word usages
 ```{r}
+
+buildCorpus = function(data, stem){
+  corpus = Corpus(VectorSource(data))
+  corpus = tm_map(corpus, content_transformer(tolower))
+  corpus = tm_map(corpus, PlainTextDocument)
+  corpus = tm_map(corpus, removePunctuation)
+  corpus = tm_map(corpus, removeWords, stopWords)
+  if(stem==1) corpus = tm_map(corpus, stemDocument)
+  return(corpus)
+}
+
+buildWordCloud = function(corpus, pal,val, name){
+  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
+}
+stopWords = removePunctuation(stopwords('SMART'))
+
+
+restaurant_reviews_rec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date >= "2007-12" & restaurant_reviews$date <= "2009-06"), ])
+
+restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaurant_reviews$date > "2009-06" & restaurant_reviews$date <= "2011-12"), ])
+
+#create corupses
+corpus_reviews_rec = buildCorpus(restaurant_reviews_rec$text,0)
+dtm_rec = DocumentTermMatrix(corpus_reviews_rec)
+tidy_rec = tidy(dtm_rec)
+ap_sentiments <- tidy_rec %>%
+  inner_join(get_sentiments("bing"), by = c(term = "word"))
+
+ap_sentiments
+
+ap_sentiments %>%
+  count(document, sentiment, wt = count) %>%
+  ungroup() %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative) %>%
+  arrange(sentiment)
+
+
+ap_sentiments %>%
+  count(sentiment, term, wt = count) %>%
+  ungroup() %>%
+  filter(n >= 2000) %>%
+  mutate(n = ifelse(sentiment == "negative", -n, n)) %>%
+  mutate(term = reorder(term, n)) %>%
+  ggplot(aes(term, n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Contribution to sentiment")
+
+#negative: 158714
+#positive: 346991
+#percent negative: 31.4%
+#cheap: 3rd highest negative word
+#expensive: 7th
+
+
+
+corpus_reviews_norec = buildCorpus(restaurant_reviews_norec$text,0)
+dtm_norec = DocumentTermMatrix(corpus_reviews_norec)
+tidy_norec = tidy(dtm_norec)
+ap_sentiments <- tidy_norec %>%
+  inner_join(get_sentiments("bing"), by = c(term = "word"))
+
+ap_sentiments
+
+ap_sentiments %>%
+  count(document, sentiment, wt = count) %>%
+  ungroup() %>%
+  spread(sentiment, n, fill = 0) %>%
+  mutate(sentiment = positive - negative) %>%
+  arrange(sentiment)
+
+ap_sentiments %>%
+  count(sentiment, term, wt = count) %>%
+  ungroup() %>%
+  filter(n >= 7500) %>%
+  mutate(n = ifelse(sentiment == "negative", -n, n)) %>%
+  mutate(term = reorder(term, n)) %>%
+  ggplot(aes(term, n, fill = sentiment)) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  ylab("Contribution to sentiment")
+
+#negative: 733329
+#positive: 1731938
+#percent negative: 29.75% 
+#cheap: 5th
+#expensive: 8th
+
+buildWordCloud(corpus_reviews_rec, "Spectral",8, "test")
+buildWordCloud(corpus_reviews_norec, "Spectral",8, "test2")
+
 
 ```
 
 
+
+
+
 #connect with restaurants
 
-```{r}
+```{r, include=FALSE, message=FALSE}
 
 restaurant_expenditures=read.csv("restaurant_expenditures.csv")
-restaurant_expenditures
+# restaurant_expenditures
+
+```
+
+```{r}
 
 #add x axis with dates
 rest_exp_dates = seq(as.Date("2005/12/01"), by = "quarter",length.out = 44)
@@ -617,7 +890,6 @@ test_stationary(rest_real_exp_diff_log)
 rest_exp_dates_diff = rest_exp_dates[2:length(rest_exp_dates)]
 plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l")
 
-#STILL NOT STATIONARY WTF?!
 
 
 
@@ -632,8 +904,8 @@ grangertest(rest_real_exp_diff_log~gdp_growth_subset[1:length(gdp_growth_subset)
 grangertest(gdp_growth_subset[1:length(gdp_growth_subset)]~rest_real_exp_diff_log,order=select$select[1])
 
 rec_exp_diff_log_dummy = add_recession_dummy(rest_exp_dates_diff)
-gls_rest_real_exp_diff_log = gls(rest_real_exp_diff_log~rec_exp_diff_log_dummy)
-summary(gls_rest_real_exp_diff_log)
+lm_rest_real_exp_diff_log = lm(rest_real_exp_diff_log~rec_exp_diff_log_dummy)
+summary(lm_rest_real_exp_diff_log)
 
 ```
 
@@ -641,7 +913,10 @@ yes gdp granger causes restaurant expenditures and recession dummy
 
 
 
-#connect reviews with restaurants
+#connect num of reviews with restaurants
+
+
+
 
 
 ```{r}
@@ -655,101 +930,31 @@ summary(vm_rev_exp)
 grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
 grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
 
+
 #looks like log_rev_quarter is granger caused by rest_real_exp_diff_log
-log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
-summary(log_rev_exp_gls)
-plot(log_rev_exp_gls$fitted,type="l")
+log_rev_exp_lm = lm(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
+summary(log_rev_exp_lm)
+plot(log_rev_exp_lm$fitted,type="l")
 plot(log_rev_quarter)
 
-temp = tslm(log_rev_quarter~trend+season)
-seasonaly_adj_log_rev=temp$residuals
 
-reg_seasonaly_adj_log_rev = gls(seasonaly_adj_log_rev~rec_dummy_rev_growth_q)
-summary(reg_seasonaly_adj_log_rev)
-
-
-
-
-#IS RECESSION AN IV?!
-
+#gdp IV
 
 #two stage regression
-stage1 = gls(rest_real_exp_diff_log~rec_dummy_rev_growth_q)
+stage1 = lm(rest_real_exp_diff_log~gdp_growth_subset)
 summary(stage1)
-stage1_resid = resid(stage1)
+stage1_fitted = fitted(stage1)
 
-stage2=gls(seasonaly_adj_log_rev~stage1_resid)
-summary(stage2)
+#var for possible iv
+iv_combined = cbind(stage1_fitted,log_rev_quarter)
+select=VARselect(iv_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_iv=VAR(iv_combined,select$select[1])
+plot(vm_iv$y)
+summary(vm_iv)
 
-#what am i doing....?
-
-
-# #no granger causality
-# 
-# grangertest(log_rev_quarter~gdp_growth_subset)
-# 
-# grangertest(log_rev_quarter~rec_dummy_rev_growth_q)
-# 
-# log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
-# summary(log_rev_exp_gls)
-# 
-# testing = tslm(log_rev_quarter~trend+season)
-# summary(testing)
-# 
-# temp=testing$residuals
-# 
-# reg_Test = gls(temp~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
-# summary(reg_Test)
-# 
-# rev_exp_combined = cbind(rest_real_exp_diff_log,temp)
-# select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-# vm_rev_exp=VAR(rev_exp_combined,select$select[1])
-# plot(vm_rev_exp$y)
-# summary(vm_rev_exp)
-# 
-# grangertest(rest_real_exp_diff_log~temp,order=select$select[1])
-# grangertest(temp~rest_real_exp_diff_log,order=select$select[1])
-# 
-# 
-# plot(vm_rev_exp$y[,1])
-# lines(vm_rev_exp$y[,2],col="red")
-
-
+grangertest(stage1_fitted~log_rev_quarter,order=select$select[1])
+grangertest(log_rev_quarter~stage1_fitted,order=select$select[1])
 ```
-
-
-
-<!-- #seasonally adjust log reviews by quarter -->
-
-<!-- ```{r} -->
-<!-- decompose_log_rev_quarter=decompose(log_rev_quarter,"additive") -->
-<!-- log_rev_quarter_adj=log_rev_quarter-decompose_log_rev_quarter$seasonal -->
-<!-- plot(log_rev_quarter_adj) -->
-
-
-<!-- rev_adj_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj) -->
-<!-- select=VARselect(rev_adj_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL) -->
-<!-- vm_rev_adj_exp=VAR(rev_adj_exp_combined,select$select[1]) -->
-<!-- plot(vm_rev_adj_exp$y) -->
-<!-- summary(vm_rev_adj_exp) -->
-
-
-<!-- gls_rev_adj=gls(log_rev_quarter_adj~rec_dummy_rev_growth_q) -->
-<!-- summary(gls_rev_adj) -->
-
-<!-- log_rev_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log) -->
-<!-- summary(log_rev_gls) -->
-
-
-<!-- log_rev_exp_gls = gls(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log+rest_real_exp_diff_log) -->
-<!-- summary(log_rev_exp_gls) -->
-<!-- ``` -->
-
-yelpers are not representative of overall restaurant goers, but are still effected by the recession
-
-
-
-
 
 
 
