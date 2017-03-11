@@ -1,5 +1,5 @@
 ---
-title: "Yelpers in The Great Recession"
+title: "Yelpers in The Great Recession: A Case Study"
 date: "2/7/2017"
 output:
   pdf_document: default
@@ -34,6 +34,11 @@ library(tidyr)
 library(dplyr)
 library(tidytext)
 library(ggplot2)
+library(car)
+```
+
+```{r global_options, echo=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(fig.path='Figs/')
 ```
 
 ```{r setup, include=FALSE}
@@ -54,26 +59,36 @@ analysis
   yelp stock data
 conclusion 
 
+#Abstract
+
+
+
 #Introduction
 
-Hypothesis: 
-yelpers
-
+This is a case study into Yelp restaurantgoers' consumer behavior during The Great Recession based off the Yelp Challenge 9.
 
 
 #Data Sets
 
-yelp
-fred
-yahoo finance
-bea
+Yelp Challenge 9: 
+
+FRED: 
+
+Yahoo Finance: 
+
+BEA: 
 
 
+#Challenges and Data Issues
 
+Early Yelp data is not very good
+Most recent Yelp data does not include entire month
+
+subset relevant data from begining of 2006 to end of 2016
 
 
 #Motivation
-If restaurant Yelpers' behavior during and aroud The Great Recession period can be modeled and connected with restaurant expenditures, then there can be conclusions about Yelpers' behavior. If recessionary behavior can be understood, then restaurants can react accordingly.
+If restaurant Yelpers' behavior during and aroud The Great Recession period can be modeled,then there can be conclusions about Yelpers' behavior. If recessionary behavior can be understood, then restaurants can react accordingly.
 
 
 ```{r}
@@ -144,26 +159,35 @@ users_by_date = with(users_by_date_all, users_by_date_all[(users_by_date_all$yel
 users_by_date_xts=xts(users_by_date$`count(yelping_since)`, as.Date(users_by_date$yelping_since,"%Y-%m-%d"))
 ts_m = apply.monthly(users_by_date_xts, sum)
 
-ts_m
+# ts_m
 
 
 users_df = data.frame(date=index(ts_m), coredata(ts_m))
-users_df
+# users_df
 
 stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
 ```
 
+
+#Users, Stocks, & Reviews
+
+First, I will explore the Yelp stock data to see if it is of any relevance.
+
 ```{r}
-plot(stock_users,type="l")
+plot(stock_users,type="l",ylab="New Users",xlab="Date", main= "New User Acounts by Month")
 
 yelp_stock = get.hist.quote("YELP",end="2017-01-30",quote="AdjClose",compression="m")
 # yelp_stock
 
-plot(yelp_stock)
+plot(yelp_stock,ylab= "Adjusted Close",xlab="Date",main="Yelp Stock")
 
 test_stationary = function(t){
   print(kpss.test(t))
   print(adf.test(t))
+}
+
+test_cointegration = function(resid){
+  print(test_stationary(resid))
 }
 
 test_stationary(ts(stock_users$coredata.ts_m.,start=c(2012,3),freq=12))
@@ -693,6 +717,34 @@ summary(lm_d3_adj_rev)
 lm_d4_adj_rev = lm(tslm_d4_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d4_adj_rev)
 
+```
+
+
+```{r}
+#detrend review counts
+
+ts_rev_count=ts(df_rev_count$coredata.df_rev_m.,start=c(2006,2),freq=12)
+ts_rev_count_tslm = tslm(ts_rev_count~trend+season)
+summary(ts_rev_count_tslm)
+ts_rev_count_adj = resid(ts_rev_count_tslm)
+plot(ts_rev_count_adj)
+
+lm_d1_adj_rev_adj = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj)
+summary(lm_d1_adj_rev_adj)
+
+lm_d2_adj_rev_adj = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj)
+summary(lm_d2_adj_rev_adj)
+
+lm_d3_adj_rev_adj = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj)
+summary(lm_d3_adj_rev_adj)
+
+lm_d4_adj_rev_adj = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj)
+summary(lm_d4_adj_rev_adj)
+
+vif(lm_d1_adj_rev_adj)
+vif(lm_d2_adj_rev_adj)
+vif(lm_d3_adj_rev_adj)
+vif(lm_d4_adj_rev_adj)
 
 ```
 
@@ -758,6 +810,33 @@ summary(d4_star_lm)
 #looks like the stars dropping during a recession was only in 1 and 2 dollar signs restaurants
 
 ```
+
+
+#how bout use stars in reg for dolla dolla
+```{r}
+
+
+
+lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg)
+summary(lm_d1_adj_rev_adj_star)
+
+lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg)
+summary(lm_d2_adj_rev_adj_star)
+
+lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg)
+summary(lm_d3_adj_rev_adj_star)
+
+lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg)
+summary(lm_d4_adj_rev_adj_star)
+
+vif(lm_d1_adj_rev_adj_star)
+vif(lm_d2_adj_rev_adj_star)
+vif(lm_d3_adj_rev_adj_star)
+vif(lm_d4_adj_rev_adj_star)
+
+
+```
+
 
 
 #comment out for now, cuz takes too long to process
@@ -931,34 +1010,78 @@ grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
 grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
 
 
-#looks like log_rev_quarter is granger caused by rest_real_exp_diff_log
-log_rev_exp_lm = lm(log_rev_quarter~rec_dummy_rev_growth_q+rest_real_exp_diff_log)
-summary(log_rev_exp_lm)
-plot(log_rev_exp_lm$fitted,type="l")
-plot(log_rev_quarter)
+#try to seasonally adjust
+
+log_rev_quarter_tslm = tslm(log_rev_quarter~ season)
+summary(log_rev_quarter_tslm)
+log_rev_quarter_adj = resid(log_rev_quarter_tslm)
+plot(log_rev_quarter_adj)
 
 
-#gdp IV
+rev_exp_adj_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj)
+select=VARselect(rev_exp_adj_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+vm_rev_adj_exp=VAR(rev_exp_adj_combined,select$select[1])
+plot(vm_rev_adj_exp$y)
+summary(vm_rev_adj_exp)
 
-#two stage regression
-stage1 = lm(rest_real_exp_diff_log~gdp_growth_subset)
-summary(stage1)
-stage1_fitted = fitted(stage1)
+grangertest(rest_real_exp_diff_log~log_rev_quarter_adj, order=select$select[1])
+grangertest(log_rev_quarter_adj~rest_real_exp_diff_log, order=select$select[1])
 
-#var for possible iv
-iv_combined = cbind(stage1_fitted,log_rev_quarter)
-select=VARselect(iv_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_iv=VAR(iv_combined,select$select[1])
-plot(vm_iv$y)
-summary(vm_iv)
 
-grangertest(stage1_fitted~log_rev_quarter,order=select$select[1])
-grangertest(log_rev_quarter~stage1_fitted,order=select$select[1])
+plot(log_rev_quarter_adj)
+plot(rest_real_exp_diff_log,type="l")
+
+
+#only the lags
+lm_temp = lm(log_rev_quarter_adj~rest_real_exp_diff_log)
+
+summary(lm_temp)
+
+
+
+# #gdp IV
+# 
+# #two stage regression
+# stage1 = lm(rest_real_exp_diff_log~gdp_growth_subset)
+# summary(stage1)
+# stage1_fitted = fitted(stage1)
+# 
+# #var for possible iv
+# iv_combined = cbind(stage1_fitted,log_rev_quarter)
+# select=VARselect(iv_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+# vm_iv=VAR(iv_combined,select$select[1])
+# plot(vm_iv$y)
+# summary(vm_iv)
+# 
+# grangertest(stage1_fitted~log_rev_quarter,order=select$select[1])
+# grangertest(log_rev_quarter~stage1_fitted,order=select$select[1])
+# 
+# test_cointegration(resid(stage1))
+
+
+
 ```
 
 
+#build rest exp into the dollar signs models
+```{r}
+
+lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg)
+summary(lm_d1_adj_rev_adj_star)
+
+lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg)
+summary(lm_d2_adj_rev_adj_star)
+
+lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg)
+summary(lm_d3_adj_rev_adj_star)
+
+lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg)
+summary(lm_d4_adj_rev_adj_star)
 
 
+
+
+```
 
 
 
