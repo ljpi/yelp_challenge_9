@@ -79,16 +79,27 @@ Yahoo Finance:
 BEA: 
 
 
-#Challenges and Data Issues
+#Challenges and Data Issues Addressed
 
 Early Yelp data is not very good
 Most recent Yelp data does not include entire month
 
 subset relevant data from begining of 2006 to end of 2016
 
+Recession only happened in US, data from worldwide
 
 #Motivation
 If restaurant Yelpers' behavior during and aroud The Great Recession period can be modeled,then there can be conclusions about Yelpers' behavior. If recessionary behavior can be understood, then restaurants can react accordingly.
+
+#The Process
+
+After gathering the data, I examined all the potentially relevant information.
+
+Then gathered any additional data that may help
+
+Then test to see if assumptions about the inner workings and dynamics were true
+
+Finally, try to model the consumer's behavior
 
 
 ```{r}
@@ -149,7 +160,7 @@ add_recession_dummy = function(l){
 user = load_json("yelp_academic_dataset_user.json")
 colnames(user)
 subset_users = user[4]
-subset_users
+# subset_users
 users_by_date_all = sqldf("select yelping_since, count(yelping_since) from subset_users group by yelping_since order by yelping_since")
 
 
@@ -171,7 +182,7 @@ stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
 
 #Users, Stocks, & Reviews
 
-First, I will explore the Yelp stock data to see if it is of any relevance.
+First, I will explore the Yelp stock data to see if it is of any relevance in an attempt to handle any cases of endogeneity.
 
 ```{r}
 plot(stock_users,type="l",ylab="New Users",xlab="Date", main= "New User Acounts by Month")
@@ -209,53 +220,49 @@ test_stationary(ts_users)
 ts_yelp = ts(log_yelp_growth,start=c(2012,4),freq=12)
 test_stationary(ts_yelp)
 
-plot(ts_users,col="blue")
-lines(ts_yelp,col="red")
-
 combined = cbind(ts_yelp,ts_users)
 select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm=VAR(combined,p=select$select[1])
-plot(vm$y)
+# plot(vm$y)
 summary(vm)
 
 grangertest(ts_users~ts_yelp)
 
+#users and stock no effects
 
-
-sp500 = get.hist.quote("^GSPC",quote="AdjClose",compression="m",start=as.Date("2012-03-01","%Y-%m-%d"),end=as.Date("2017-01-30","%Y-%m-%d"))
-
-# sp500
-test_stationary(sp500)
-
-log_sp500_growth = as.data.frame(diff(log(sp500)))
-ts_sp500 = ts(log_sp500_growth,start=c(2012,4),freq=12)
-# ts_sp500
-test_stationary(ts_sp500)
-
-# ts_yelp
-# ts_sp500
-
-
-plot(ts_users,col="blue")
-lines(ts_yelp,col="red")
-
-combined = cbind(ts_yelp,ts_sp500)
-
-select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-
-vm=VAR(combined,p=select$select[1])
-
-plot(vm$y)
-
-summary(vm)
+# sp500 = get.hist.quote("^GSPC",quote="AdjClose",compression="m",start=as.Date("2012-03-01","%Y-%m-%d"),end=as.Date("2017-01-30","%Y-%m-%d"))
+# 
+# # sp500
+# test_stationary(sp500)
+# 
+# log_sp500_growth = as.data.frame(diff(log(sp500)))
+# ts_sp500 = ts(log_sp500_growth,start=c(2012,4),freq=12)
+# # ts_sp500
+# test_stationary(ts_sp500)
+# 
+# # ts_yelp
+# # ts_sp500
+# 
+# 
+# plot(ts_users,col="blue")
+# lines(ts_yelp,col="red")
+# 
+# combined = cbind(ts_yelp,ts_sp500)
+# 
+# select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+# 
+# vm=VAR(combined,p=select$select[1])
+# 
+# plot(vm$y)
+# 
+# summary(vm)
 
 
 
 ```
 
-Growth rate of users do not have an effect on the stock value of Yelp - no correlation to stock market. good! This elinates the possibility that effects are due to yelp as a company doing good or bad.
+Growth rate of users do not have an effect on the stock value of Yelp - no correlation to stock market. good! This elinates the possibility that effects are due to yelp as a company doing good or bad. Eliminate stock data from our study
 
-should i examine review scores + users + etc and its relation to s and p500 during recession? or just move on to gdp and recession
 
 #review scores and gdp
 
@@ -269,7 +276,7 @@ business = remove_lists_from_df(business)
 
 #sanity check the states for subsetting into states
 sanity_state = sqldf("select state from business group by state")
-sanity_state
+# sanity_state
 
 #us only
 restaurants = sqldf("select business_id from business where (categories like '%Restaurants%' and (state = 'AZ' or state = 'IL' or state = 'NC' or state = 'NV' or state = 'NY' or state = 'OH' or state = 'PA' or state = 'SC' or state = 'VT' or state = 'WI'))")
@@ -284,7 +291,7 @@ restaurant_reviews = with(restaurant_reviews_all, restaurant_reviews_all[(restau
 
 review_date_star = as.data.frame(restaurant_reviews$date)
 review_date_star$stars = restaurant_reviews$stars
-head(review_date_star)
+# head(review_date_star)
 colnames(review_date_star)=c("date","stars")
 
 
@@ -293,7 +300,7 @@ review_date_star$date=as.Date(review_date_star$date,"%Y-%m-%d")
 #freq of new reviews
 review_counts_by_date = sqldf("select date, count(date) from review_date_star group by date order by date")
 
-head(review_counts_by_date)
+# head(review_counts_by_date)
 
 ```
 
@@ -306,7 +313,7 @@ df_rev_m = apply.monthly(reviews_by_date, sum)
 df_rev_count = data.frame(date=index(df_rev_m), coredata(df_rev_m))
 # df_rev_count
 
-plot(df_rev_count$date,df_rev_count$coredata.df_rev_m.,type="l")
+plot(df_rev_count$date,df_rev_count$coredata.df_rev_m.,type="l",xlab="Date",ylab="Monthly Reviews",main="New Reviews by Month")
 
 
 #review growth rates/new user growth rates
@@ -320,8 +327,8 @@ log_user_count=diff(log(ts_m[,1]))
 log_user_count = na.omit(log_user_count)
 log_user_count = ts(log_user_count,start=c(2006,2),freq=12)
 
-plot(log_rev_count,type="l", main="growth rate of user reviews and accounts")
-lines(log_user_count[,1],col="red")
+# plot(log_rev_count,type="l", main="growth rate of user reviews and accounts")
+# lines(log_user_count[,1],col="red")
 
 #do a var model between growth rate of users revs and accounts
 
@@ -329,7 +336,7 @@ lines(log_user_count[,1],col="red")
 rates_combined = cbind(log_rev_count,log_user_count)
 select=VARselect(rates_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm_rates=VAR(rates_combined,select$select[1])
-plot(vm_rates$y)
+# plot(vm_rates$y)
 summary(vm_rates)
 
 #do granger causality test
@@ -339,7 +346,9 @@ grangertest(log_user_count~log_rev_count,order=select$select[1])
 user_rev_lm=lm(log_rev_count~log_user_count)
 summary(user_rev_lm)
 
-#users and review#s granger cause each other, just use one
+test_cointegration(resid(user_rev_lm))
+
+#users and num reviews granger cause each other and are cointegrated, just use one
 
 #stars by month
 stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
@@ -350,7 +359,7 @@ df_stars = data.frame(date=index(df_stars_m), coredata(df_stars_m))
 df_stars$avg = df_stars$coredata.df_stars_m./df_rev_count$coredata.df_rev_m.
 # head(df_stars)
 
-plot(df_stars$date,df_stars$avg,type = "l")
+plot(df_stars$date,df_stars$avg,type = "l",xlab="Date",ylab="Average Review Scores",main="Average Review Scores by Month")
 #evidence of recession in stars
 stars_recession_dummy = add_recession_dummy(df_stars$date)
 stars_avg=df_stars$avg
@@ -375,7 +384,7 @@ stars_recession_diff_log_dummy = add_recession_dummy(df_stars_diff_log$date)
 # stars_reg = lm(df_stars_diff_log$avg ~ stars_recession_diff_log_dummy)
 # summary(stars_reg)
 
-plot(df_stars_diff_log$date,df_stars_diff_log$avg,type="l")
+plot(df_stars_diff_log$date,df_stars_diff_log$avg,type="l",main="Growth Rate of Review Scores by Month",xlab="Date",ylab="Review Scores Growth Rate")
 
 stars_diff_log_avg = df_stars_diff_log$avg
 stars_diff_log_lm = lm(stars_diff_log_avg~stars_recession_diff_log_dummy)
@@ -390,11 +399,11 @@ ts_stars = ts(df_stars$avg,start=c(2006,2),freq=12)
 stars_tslm = tslm(ts_stars~trend+season)
 summary(stars_tslm)
 
-plot(ts_stars)
-lines(stars_tslm$fitted.values,col="red")
+# plot(ts_stars)
+# lines(stars_tslm$fitted.values,col="red")
 
 detrend_stars = resid(stars_tslm)
-plot(detrend_stars)
+plot(detrend_stars, main="Detrended & Seasonally Adjusted Review Scores by Month",ylab = "Average Review Score")
 
 detrend_stars_lm=lm(detrend_stars~stars_recession_dummy)
 summary(detrend_stars_lm)
@@ -438,25 +447,29 @@ mean(df_stars$avg)
 getSymbols('GDPC96', src = 'FRED')
 gdp = GDPC96
 
-plot(gdp)
+plot(gdp,main="Real GDP")
 
 gdp_growth = na.omit(diff(log(gdp)))
-plot(gdp_growth)
+plot(gdp_growth,ylab="GDP Growth",main="Real GDP Growth Rate")
+
+
 gdp_growth_subset = with(gdp_growth, gdp_growth[index(gdp_growth) >= "2006-04-01" & index(gdp_growth) < "2016-12-30", ])
 gdp_growth_subset = ts(gdp_growth_subset,start=c(2006,2),frequency = 4)
-plot(gdp_growth_subset)
+plot(gdp_growth_subset,ylab="GDP Growth",main="Real GDP Growth 2006Q2 to 2016Q4")
+rect(2007.9166667, -1, 2009.5, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 
 #create quarterly review growth rate
 reviews_by_quarter=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
 df_rev_m_quarter = apply.quarterly(reviews_by_quarter, sum)
 df_rev_quarter = data.frame(date=index(df_rev_m_quarter), coredata(df_rev_m_quarter))
 # df_rev_quarter
-plot(df_rev_quarter$date,df_rev_quarter$coredata.df_rev_m_quarter.,type="l")
+# plot(df_rev_quarter$date,df_rev_quarter$coredata.df_rev_m_quarter.,type="l")
 
 log_rev_quarter=diff(log(df_rev_quarter$coredata.df_rev_m_quarter.))
 log_rev_quarter = na.omit(log_rev_quarter)
 log_rev_quarter = ts(log_rev_quarter,start=c(2006,2),freq=4)
-plot(log_rev_quarter,type="l")
+plot(log_rev_quarter,type="l",ylab="Review Growth Rate",main="Review Growth Rate by Quarter")
+rect(2007.9166667, -1, 2009.5, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 
 # length(log_rev_quarter)
 # length(gdp_growth_subset)
@@ -465,7 +478,7 @@ plot(log_rev_quarter,type="l")
 gdp_combined = cbind(log_rev_quarter,gdp_growth_subset)
 select=VARselect(gdp_combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm_gdp=VAR(gdp_combined,p=12)
-plot(vm_gdp$y)
+# plot(vm_gdp$y)
 summary(vm_gdp)
 
 #do a var on quarterly gdp growth and quarterly avg review score
@@ -474,7 +487,7 @@ recession_dummy_reviews_q = add_recession_dummy(df_rev_quarter$date)
 
 reg_reviews = lm(df_rev_quarter$coredata.df_rev_m_quarter.~recession_dummy_reviews_q)
 summary(reg_reviews)
-#first reg is misleading
+#first reg is misleading because trend
 
 
 
@@ -551,14 +564,16 @@ df_dollars_4 = data.frame(date=index(df_d_4), coredata(df_d_4))
 
 
 recession_dummy_dollars_m = add_recession_dummy(df_dollars_1$date)
-
-
-plot(df_dollars_1,type="l")
-plot(df_dollars_2,type="l")
-plot(df_dollars_3,type="l")
-plot(df_dollars_4,type="l")
-
+# 
+# par(mfrow=c(2,2))
+# plot(df_dollars_1,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $ Restaurants")
+# plot(df_dollars_2,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$ Restaurants")
+# plot(df_dollars_3,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$$ Restaurants")
+# plot(df_dollars_4,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$$$ Restaurants")
+#highly seasonal
 ```
+
+
 
 ```{r}
 df_dollars_1_dlog = as.data.frame(diff(log(df_dollars_1$coredata.df_d_1.)))
@@ -574,131 +589,161 @@ ts_dollar_3=ts(df_dollars_3$coredata.df_d_3.,start=c(2006,2),freq=12)
 ts_dollar_4=ts(df_dollars_4$coredata.df_d_4.,start=c(2006,2),freq=12)
 
 
+par(mfrow=c(2,2))
+plot(ts_dollar_1,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $ Restaurants")
+rect(2007.9166667, -1000, 2009.5, 20000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
+plot(ts_dollar_2,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$ Restaurants")
+rect(2007.9166667, -3000, 2009.5, 40000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
+plot(ts_dollar_3,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$$ Restaurants")
+rect(2007.9166667, -1000, 2009.5, 7000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
+plot(ts_dollar_4,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$$$ Restaurants")
+rect(2007.9166667, -1000, 2009.5, 2000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
+
+
 dollars_1_dlog=diff(log(ts_dollar_1))
 dollars_2_dlog=diff(log(ts_dollar_2))
 dollars_3_dlog=diff(log(ts_dollar_3))
 dollars_4_dlog=diff(log(ts_dollar_4))
 
-plot(dollars_1_dlog)
-plot(dollars_2_dlog)
-plot(dollars_3_dlog)
-plot(dollars_4_dlog)
+par(mfrow=c(2,2))
+plot(dollars_1_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $ Restaurants")
+plot(dollars_2_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$ Restaurants")
+plot(dollars_3_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$ Restaurants")
+plot(dollars_4_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$$ Restaurants")
 
-lm_dollars_recession_dummy = recession_dummy_dollars_m[2:length(recession_dummy_dollars_m)]
+#we can see highly seasonal
+
+# lm_dollars_recession_dummy = recession_dummy_dollars_m[2:length(recession_dummy_dollars_m)]
 
 ```
+
+
 
 #seasonally adjust the data
 
 ```{r}
 
-#seasonally adjust data
+#seasonally adjust data and remove trend
+
+par(mfrow=c(2,2))
 
 #levels
 tslm_d1 = tslm(ts_dollar_1~trend+season)
 #summary(tslm_d1)
 tslm_d1_resid = resid(tslm_d1)
-plot(tslm_d1_resid)
+plot(tslm_d1_resid,xlab="Date",ylab="New Reviews",main="Adjusted Reviews, $")
+rect(2007.9166667, -3000, 2009.5, 3000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 lm_d1_adj = lm(tslm_d1_resid~recession_dummy_dollars_m)
 summary(lm_d1_adj)
 
 tslm_d2 = tslm(ts_dollar_2~trend+season)
 #summary(tslm_d1)
 tslm_d2_resid = resid(tslm_d2)
-plot(tslm_d2_resid)
+plot(tslm_d2_resid,xlab="Date",ylab="New Reviews",main="Adjusted Reviews, $$")
+rect(2007.9166667, -7000, 2009.5, 7000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 lm_d2_adj = lm(tslm_d2_resid~recession_dummy_dollars_m)
 summary(lm_d2_adj)
 
 tslm_d3 = tslm(ts_dollar_3~trend+season)
 #summary(tslm_d1)
 tslm_d3_resid = resid(tslm_d3)
-plot(tslm_d3_resid)
+plot(tslm_d3_resid,xlab="Date",ylab="New Reviews",main="Adjusted Reviews, $$$")
+rect(2007.9166667, -500, 2009.5, 500, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 lm_d3_adj = lm(tslm_d3_resid~recession_dummy_dollars_m)
 summary(lm_d3_adj)
 
 tslm_d4 = tslm(ts_dollar_4~trend+season)
 #summary(tslm_d1)
 tslm_d4_resid = resid(tslm_d4)
-plot(tslm_d4_resid)
+plot(tslm_d4_resid,xlab="Date",ylab="New Reviews",main="Adjusted Reviews, $$$$")
+rect(2007.9166667, -500, 2009.5, 500, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 lm_d4_adj = lm(tslm_d4_resid~recession_dummy_dollars_m)
 summary(lm_d4_adj)
 
 ```
 
-```{r}
 
 
-#growth
-tslm_d1_growth = tslm(dollars_1_dlog~trend+season)
-#summary(tslm_d1)
-tslm_d1_growth_resid = resid(tslm_d1_growth)
-plot(tslm_d1_growth_resid)
-lm_d1_growth_adj = lm(tslm_d1_growth_resid~lm_dollars_recession_dummy)
-summary(lm_d1_growth_adj)
-
-tslm_d2_growth = tslm(dollars_2_dlog~trend+season)
-#summary(tslm_d1)
-tslm_d2_growth_resid = resid(tslm_d2_growth)
-plot(tslm_d2_growth_resid)
-lm_d2_growth_adj = lm(tslm_d2_growth_resid~lm_dollars_recession_dummy)
-summary(lm_d2_growth_adj)
-
-tslm_d3_growth = tslm(dollars_3_dlog~trend+season)
-#summary(tslm_d1)
-tslm_d3_growth_resid = resid(tslm_d3_growth)
-plot(tslm_d3_growth_resid)
-lm_d3_growth_adj = lm(tslm_d3_growth_resid~lm_dollars_recession_dummy)
-summary(lm_d3_growth_adj)
-
-tslm_d4_growth = tslm(dollars_4_dlog~trend+season)
-#summary(tslm_d1)
-tslm_d4_growth_resid = resid(tslm_d4_growth)
-plot(tslm_d4_growth_resid)
-lm_d4_growth_adj = lm(tslm_d4_growth_resid~lm_dollars_recession_dummy)
-summary(lm_d4_growth_adj)
-
-```
-
-```{r}
-
-#percentages
-ts_dollar_total = ts_dollar_1+ts_dollar_2+ts_dollar_3+ts_dollar_4
-ts_d1_per = ts_dollar_1/ts_dollar_total
-ts_d2_per = ts_dollar_2/ts_dollar_total
-ts_d3_per = ts_dollar_3/ts_dollar_total
-ts_d4_per = ts_dollar_4/ts_dollar_total
-
-plot(ts_d1_per)
-plot(ts_d2_per)
-plot(ts_d3_per)
-plot(ts_d4_per)
-
-tslm_d1_per = tslm(ts_d1_per~trend+season)
-tslm_d1_per_resid = resid(tslm_d1_per)
-plot(tslm_d1_per_resid)
-lm_d1_per_adj = lm(tslm_d1_per_resid~recession_dummy_dollars_m)
-summary(lm_d1_per_adj)
-
-tslm_d2_per = tslm(ts_d2_per~trend+season)
-tslm_d2_per_resid = resid(tslm_d2_per)
-plot(tslm_d2_per_resid)
-lm_d2_per_adj = lm(tslm_d2_per_resid~recession_dummy_dollars_m)
-summary(lm_d2_per_adj)
-
-tslm_d3_per = tslm(ts_d3_per~trend+season)
-tslm_d3_per_resid = resid(tslm_d3_per)
-plot(tslm_d3_per_resid)
-lm_d3_per_adj = lm(tslm_d3_per_resid~recession_dummy_dollars_m)
-summary(lm_d3_per_adj)
-
-tslm_d4_per = tslm(ts_d4_per~trend+season)
-tslm_d4_per_resid = resid(tslm_d4_per)
-plot(tslm_d4_per_resid)
-lm_d4_per_adj = lm(tslm_d4_per_resid~recession_dummy_dollars_m)
-summary(lm_d4_per_adj)
+<!-- ```{r} -->
 
 
-```
+<!-- #growth -->
+<!-- tslm_d1_growth = tslm(dollars_1_dlog~trend+season) -->
+<!-- #summary(tslm_d1) -->
+<!-- tslm_d1_growth_resid = resid(tslm_d1_growth) -->
+<!-- plot(tslm_d1_growth_resid) -->
+<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
+<!-- lm_d1_growth_adj = lm(tslm_d1_growth_resid~lm_dollars_recession_dummy) -->
+<!-- summary(lm_d1_growth_adj) -->
+
+<!-- tslm_d2_growth = tslm(dollars_2_dlog~trend+season) -->
+<!-- #summary(tslm_d1) -->
+<!-- tslm_d2_growth_resid = resid(tslm_d2_growth) -->
+<!-- plot(tslm_d2_growth_resid) -->
+<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
+<!-- lm_d2_growth_adj = lm(tslm_d2_growth_resid~lm_dollars_recession_dummy) -->
+<!-- summary(lm_d2_growth_adj) -->
+
+<!-- tslm_d3_growth = tslm(dollars_3_dlog~trend+season) -->
+<!-- #summary(tslm_d1) -->
+<!-- tslm_d3_growth_resid = resid(tslm_d3_growth) -->
+<!-- plot(tslm_d3_growth_resid) -->
+<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
+<!-- lm_d3_growth_adj = lm(tslm_d3_growth_resid~lm_dollars_recession_dummy) -->
+<!-- summary(lm_d3_growth_adj) -->
+
+<!-- tslm_d4_growth = tslm(dollars_4_dlog~trend+season) -->
+<!-- #summary(tslm_d1) -->
+<!-- tslm_d4_growth_resid = resid(tslm_d4_growth) -->
+<!-- plot(tslm_d4_growth_resid) -->
+<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
+<!-- lm_d4_growth_adj = lm(tslm_d4_growth_resid~lm_dollars_recession_dummy) -->
+<!-- summary(lm_d4_growth_adj) -->
+
+<!-- ``` -->
+
+
+
+<!-- ```{r} -->
+
+<!-- #percentages -->
+<!-- ts_dollar_total = ts_dollar_1+ts_dollar_2+ts_dollar_3+ts_dollar_4 -->
+<!-- ts_d1_per = ts_dollar_1/ts_dollar_total -->
+<!-- ts_d2_per = ts_dollar_2/ts_dollar_total -->
+<!-- ts_d3_per = ts_dollar_3/ts_dollar_total -->
+<!-- ts_d4_per = ts_dollar_4/ts_dollar_total -->
+
+<!-- plot(ts_d1_per) -->
+<!-- plot(ts_d2_per) -->
+<!-- plot(ts_d3_per) -->
+<!-- plot(ts_d4_per) -->
+
+<!-- tslm_d1_per = tslm(ts_d1_per~trend+season) -->
+<!-- tslm_d1_per_resid = resid(tslm_d1_per) -->
+<!-- plot(tslm_d1_per_resid) -->
+<!-- lm_d1_per_adj = lm(tslm_d1_per_resid~recession_dummy_dollars_m) -->
+<!-- summary(lm_d1_per_adj) -->
+
+<!-- tslm_d2_per = tslm(ts_d2_per~trend+season) -->
+<!-- tslm_d2_per_resid = resid(tslm_d2_per) -->
+<!-- plot(tslm_d2_per_resid) -->
+<!-- lm_d2_per_adj = lm(tslm_d2_per_resid~recession_dummy_dollars_m) -->
+<!-- summary(lm_d2_per_adj) -->
+
+<!-- tslm_d3_per = tslm(ts_d3_per~trend+season) -->
+<!-- tslm_d3_per_resid = resid(tslm_d3_per) -->
+<!-- plot(tslm_d3_per_resid) -->
+<!-- lm_d3_per_adj = lm(tslm_d3_per_resid~recession_dummy_dollars_m) -->
+<!-- summary(lm_d3_per_adj) -->
+
+<!-- tslm_d4_per = tslm(ts_d4_per~trend+season) -->
+<!-- tslm_d4_per_resid = resid(tslm_d4_per) -->
+<!-- plot(tslm_d4_per_resid) -->
+<!-- lm_d4_per_adj = lm(tslm_d4_per_resid~recession_dummy_dollars_m) -->
+<!-- summary(lm_d4_per_adj) -->
+
+
+<!-- ``` -->
 
 #introduce num of reviews into model
 control for number of new reviews, to make sure that the recession dummy doesn't accidentally capture an effect from new review numbers, in other words if the number of reviews dropped it would make sense that the number of reviews for a certain amount of dollar signs drops too
@@ -726,8 +771,9 @@ summary(lm_d4_adj_rev)
 ts_rev_count=ts(df_rev_count$coredata.df_rev_m.,start=c(2006,2),freq=12)
 ts_rev_count_tslm = tslm(ts_rev_count~trend+season)
 summary(ts_rev_count_tslm)
-ts_rev_count_adj = resid(ts_rev_count_tslm)
+ts_rev_count_adj = resid(ts_rev_count_tslm,ylab="New Reviews", main="Adjusted Reviews, Total")
 plot(ts_rev_count_adj)
+rect(2007.9166667, -9000, 2009.5, 9000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 
 lm_d1_adj_rev_adj = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj)
 summary(lm_d1_adj_rev_adj)
@@ -775,11 +821,13 @@ dollars_obd_4_star = sqldf("select date, stars from dollars_4_star order by date
 
 ```{r}
 
+par(mfrow=c(2,2))
+
 dollars_1_star_xts=xts(dollars_obd_1_star$stars, as.Date(dollars_obd_1_star$date,"%Y-%m-%d"))
 df_d_1_star = apply.monthly(dollars_1_star_xts, sum)
 df_dollars_1_star = data.frame(date=index(df_d_1_star), coredata(df_d_1_star))
 df_dollars_1_star$avg = df_dollars_1_star$coredata.df_d_1_star./df_dollars_1$coredata.df_d_1.
-plot(df_dollars_1_star$date,df_dollars_1_star$avg)
+plot(df_dollars_1_star$date,df_dollars_1_star$avg,xlab="Date",ylab="Average Star Rating",main="Average Rating for $ Restaurants")
 d1_star_lm = lm(df_dollars_1_star$avg~recession_dummy_dollars_m)
 summary(d1_star_lm)
 
@@ -787,7 +835,7 @@ dollars_2_star_xts=xts(dollars_obd_2_star$stars, as.Date(dollars_obd_2_star$date
 df_d_2_star = apply.monthly(dollars_2_star_xts, sum)
 df_dollars_2_star = data.frame(date=index(df_d_2_star), coredata(df_d_2_star))
 df_dollars_2_star$avg = df_dollars_2_star$coredata.df_d_2_star./df_dollars_2$coredata.df_d_2.
-plot(df_dollars_2_star$date,df_dollars_2_star$avg)
+plot(df_dollars_2_star$date,df_dollars_2_star$avg,xlab="Date",ylab="Average Star Rating",main="Average Rating for $$ Restaurants")
 d2_star_lm = lm(df_dollars_2_star$avg~recession_dummy_dollars_m)
 summary(d2_star_lm)
 
@@ -795,7 +843,7 @@ dollars_3_star_xts=xts(dollars_obd_3_star$stars, as.Date(dollars_obd_3_star$date
 df_d_3_star = apply.monthly(dollars_3_star_xts, sum)
 df_dollars_3_star = data.frame(date=index(df_d_3_star), coredata(df_d_3_star))
 df_dollars_3_star$avg = df_dollars_3_star$coredata.df_d_3_star./df_dollars_3$coredata.df_d_3.
-plot(df_dollars_3_star$date,df_dollars_3_star$avg)
+plot(df_dollars_3_star$date,df_dollars_3_star$avg,xlab="Date",ylab="Average Star Rating",main="Average Rating for $$$ Restaurants")
 d3_star_lm = lm(df_dollars_3_star$avg~recession_dummy_dollars_m)
 summary(d3_star_lm)
 
@@ -803,7 +851,7 @@ dollars_4_star_xts=xts(dollars_obd_4_star$stars, as.Date(dollars_obd_4_star$date
 df_d_4_star = apply.monthly(dollars_4_star_xts, sum)
 df_dollars_4_star = data.frame(date=index(df_d_4_star), coredata(df_d_4_star))
 df_dollars_4_star$avg = df_dollars_4_star$coredata.df_d_4_star./df_dollars_4$coredata.df_d_4.
-plot(df_dollars_4_star$date,df_dollars_4_star$avg)
+plot(df_dollars_4_star$date,df_dollars_4_star$avg,xlab="Date",ylab="Average Star Rating",main="Average Rating for $$$$ Restaurants")
 d4_star_lm = lm(df_dollars_4_star$avg~recession_dummy_dollars_m)
 summary(d4_star_lm)
 
@@ -833,6 +881,8 @@ vif(lm_d1_adj_rev_adj_star)
 vif(lm_d2_adj_rev_adj_star)
 vif(lm_d3_adj_rev_adj_star)
 vif(lm_d4_adj_rev_adj_star)
+
+#not really a difference, star ratings dynamics not really linked to review numbers, but both effected by rec in dif ways
 
 
 ```
@@ -929,10 +979,10 @@ ap_sentiments %>%
 
 #negative: 733329
 #positive: 1731938
-#percent negative: 29.75% 
+#percent negative: 29.75%
 #cheap: 5th
 #expensive: 8th
-
+par(mfrow=c(1,2))
 buildWordCloud(corpus_reviews_rec, "Spectral",8, "test")
 buildWordCloud(corpus_reviews_norec, "Spectral",8, "test2")
 
@@ -957,7 +1007,7 @@ restaurant_expenditures=read.csv("restaurant_expenditures.csv")
 #add x axis with dates
 rest_exp_dates = seq(as.Date("2005/12/01"), by = "quarter",length.out = 44)
 
-plot(rest_exp_dates,restaurant_expenditures$real_exp,type="l")
+plot(rest_exp_dates,restaurant_expenditures$real_exp,type="l",xlab="Date",ylab="Restaurant Expenditures",main="Real Restaurant Expenditures, Quarterly")
 
 test_stationary(restaurant_expenditures$real_exp)
 
@@ -967,7 +1017,7 @@ test_stationary(rest_real_exp_diff_log)
 
 
 rest_exp_dates_diff = rest_exp_dates[2:length(rest_exp_dates)]
-plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l")
+plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l",xlab="Date",ylab="Restaurant Expenditures Growth Rate",main="Real Restaurant Expenditures Growth Rate, Quarterly")
 
 
 
@@ -976,7 +1026,7 @@ plot(rest_exp_dates_diff,rest_real_exp_diff_log,type="l")
 gdp_exp_combined = cbind(rest_real_exp_diff_log,gdp_growth_subset)
 select=VARselect(gdp_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm_gdp_exp=VAR(gdp_exp_combined,select$select[1])
-plot(vm_gdp_exp$y)
+# plot(vm_gdp_exp$y)
 summary(vm_gdp_exp)
 
 grangertest(rest_real_exp_diff_log~gdp_growth_subset[1:length(gdp_growth_subset)],order=select$select[1])
@@ -996,14 +1046,14 @@ yes gdp granger causes restaurant expenditures and recession dummy
 
 
 
-
+need to convert number of reviews to be on same scale as rest expenditure growth rates
 
 ```{r}
 
 rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
 select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm_rev_exp=VAR(rev_exp_combined,select$select[1])
-plot(vm_rev_exp$y)
+# plot(vm_rev_exp$y)
 summary(vm_rev_exp)
 
 grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
@@ -1011,25 +1061,27 @@ grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
 
 
 #try to seasonally adjust
+#leave trend in because the original seasonally adjusted rest exp had a trend
 
 log_rev_quarter_tslm = tslm(log_rev_quarter~ season)
 summary(log_rev_quarter_tslm)
 log_rev_quarter_adj = resid(log_rev_quarter_tslm)
-plot(log_rev_quarter_adj)
+# plot(log_rev_quarter_adj)
 
 
 rev_exp_adj_combined = cbind(rest_real_exp_diff_log,log_rev_quarter_adj)
 select=VARselect(rev_exp_adj_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 vm_rev_adj_exp=VAR(rev_exp_adj_combined,select$select[1])
-plot(vm_rev_adj_exp$y)
+# plot(vm_rev_adj_exp$y)
 summary(vm_rev_adj_exp)
 
 grangertest(rest_real_exp_diff_log~log_rev_quarter_adj, order=select$select[1])
 grangertest(log_rev_quarter_adj~rest_real_exp_diff_log, order=select$select[1])
 
 
-plot(log_rev_quarter_adj)
-plot(rest_real_exp_diff_log,type="l")
+plot(log_rev_quarter_adj, xlab="Date",ylab="New Review Adjusted Growth Rate",main="New Review Adjusted Growth Rate, Quarterly")
+rect(2007.9166667, -1, 2009.5, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
+# plot(rest_real_exp_diff_log,type="l")
 
 
 #only the lags
@@ -1037,46 +1089,103 @@ lm_temp = lm(log_rev_quarter_adj~rest_real_exp_diff_log)
 
 summary(lm_temp)
 
-
-
-# #gdp IV
-# 
-# #two stage regression
-# stage1 = lm(rest_real_exp_diff_log~gdp_growth_subset)
-# summary(stage1)
-# stage1_fitted = fitted(stage1)
-# 
-# #var for possible iv
-# iv_combined = cbind(stage1_fitted,log_rev_quarter)
-# select=VARselect(iv_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-# vm_iv=VAR(iv_combined,select$select[1])
-# plot(vm_iv$y)
-# summary(vm_iv)
-# 
-# grangertest(stage1_fitted~log_rev_quarter,order=select$select[1])
-# grangertest(log_rev_quarter~stage1_fitted,order=select$select[1])
-# 
-# test_cointegration(resid(stage1))
-
-
-
 ```
 
 
 #build rest exp into the dollar signs models
 ```{r}
+#convert to quarterly
+#add in rest exp
+#try var model with adding in rest exp
 
-lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg)
-summary(lm_d1_adj_rev_adj_star)
+#adjusted num new rev by dollar signs
+d1_quarterly = apply.quarterly(as.xts(tslm_d1_resid),FUN=sum)
+ts_d1_quarterly = ts(d1_quarterly,start=c(2006,1),freq=4)
 
-lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg)
-summary(lm_d2_adj_rev_adj_star)
+d2_quarterly = apply.quarterly(as.xts(tslm_d2_resid),FUN=sum)
+ts_d2_quarterly = ts(d2_quarterly,start=c(2006,1),freq=4)
 
-lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg)
-summary(lm_d3_adj_rev_adj_star)
+d3_quarterly = apply.quarterly(as.xts(tslm_d3_resid),FUN=sum)
+ts_d3_quarterly = ts(d3_quarterly,start=c(2006,1),freq=4)
 
-lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg)
-summary(lm_d4_adj_rev_adj_star)
+d4_quarterly = apply.quarterly(as.xts(tslm_d4_resid),FUN=sum)
+ts_d4_quarterly = ts(d4_quarterly,start=c(2006,1),freq=4)
+
+#review counts by quarter
+rev_count_adj_q = apply.quarterly(as.xts(ts_rev_count_adj),FUN=sum)
+ts_rev_count_adj_q = ts(rev_count_adj_q,start=c(2006,1),freq=4)
+
+#dolla dolla stars
+d1_star_quarterly = apply.quarterly(xts(df_dollars_1_star$avg,as.Date(df_dollars_1_star$date,"%Y-%m-%d")),FUN=sum)
+ts_d1_star_quarterly = ts(d1_star_quarterly,start=c(2006,1),freq=4)
+
+d2_star_quarterly = apply.quarterly(xts(df_dollars_2_star$avg,as.Date(df_dollars_2_star$date,"%Y-%m-%d")),FUN=sum)
+ts_d2_star_quarterly = ts(d2_star_quarterly,start=c(2006,1),freq=4)
+
+d3_star_quarterly = apply.quarterly(xts(df_dollars_3_star$avg,as.Date(df_dollars_3_star$date,"%Y-%m-%d")),FUN=sum)
+ts_d3_star_quarterly = ts(d3_star_quarterly,start=c(2006,1),freq=4)
+
+d4_quarterly = apply.quarterly(xts(df_dollars_4_star$avg,as.Date(df_dollars_4_star$date,"%Y-%m-%d")),FUN=sum)
+ts_d4_star_quarterly = ts(d4_quarterly,start=c(2006,1),freq=4)
+
+#rec quarter
+rec_q=add_recession_dummy(index(d1_star_quarterly))
+
+#since in levels, use trend adjusted level of expenditures (detrend)
+
+rest_exp_q = ts(restaurant_expenditures$real_exp,start=c(2006,1),freq=4)
+rest_exp_q_tslm = tslm(rest_exp_q~trend)
+rest_exp_q_adj = resid(rest_exp_q_tslm)
+
+
+
+
+
+
+lm_d1_full = lm(ts_d1_quarterly~rec_q+ts_rev_count_adj_q+ts_d1_star_quarterly+rest_exp_q_adj)
+summary(lm_d1_full)
+
+lm_d2_full = lm(ts_d2_quarterly~rec_q+ts_rev_count_adj_q+ts_d2_star_quarterly+rest_exp_q_adj)
+summary(lm_d2_full)
+
+lm_d3_full = lm(ts_d3_quarterly~rec_q+ts_rev_count_adj_q+ts_d3_star_quarterly+rest_exp_q_adj)
+summary(lm_d3_full)
+
+lm_d4_full = lm(ts_d4_quarterly~rec_q+ts_rev_count_adj_q+ts_d4_star_quarterly+rest_exp_q_adj)
+summary(lm_d4_full)
+
+
+vif(lm_d1_full)
+vif(lm_d2_full)
+vif(lm_d3_full)
+vif(lm_d4_full)
+
+#lots of insignificance and multicollinearity
+#how about a var
+
+combinedFull1 = cbind(ts_d1_quarterly,rec_q,ts_rev_count_adj_q,ts_d1_star_quarterly,rest_exp_q_adj)
+select=VARselect(combinedFull1,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+fullVar1=VAR(combinedFull1,p=select$select[1])
+plot(fullVar1$y)
+summary(fullVar1)
+
+combinedFull2 = cbind(ts_d2_quarterly,rec_q,ts_rev_count_adj_q,ts_d2_star_quarterly,rest_exp_q_adj)
+select=VARselect(combinedFull2,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+fullVar2=VAR(combinedFull2,p=select$select[1])
+plot(fullVar2$y)
+summary(fullVar2)
+
+combinedFull3 = cbind(ts_d3_quarterly,rec_q,ts_rev_count_adj_q,ts_d3_star_quarterly,rest_exp_q_adj)
+select=VARselect(combinedFull3,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+fullVar3=VAR(combinedFull3,p=select$select[1])
+plot(fullVar3$y)
+summary(fullVar3)
+
+combinedFull4 = cbind(ts_d4_quarterly,rec_q,ts_rev_count_adj_q,ts_d4_star_quarterly,rest_exp_q_adj)
+select=VARselect(combinedFull4,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+fullVar4=VAR(combinedFull4,p=select$select[1])
+plot(fullVar4$y)
+summary(fullVar4)
 
 
 
@@ -1399,5 +1508,6 @@ sources:
 fred
 yelp
 https://www.bea.gov/iTable/iTable.cfm?reqid=9&step=1&acrdn=2#reqid=9&step=1&isuri=1&904=2004&903=64&906=q&905=2016&910=x&911=0
+https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
 
 
