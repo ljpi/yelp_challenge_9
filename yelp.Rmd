@@ -1,6 +1,7 @@
 ---
-title: "Yelpers in The Great Recession: A Case Study"
-date: "2/7/2017"
+title: "Modeling Restaurant-Goer's Behavior in The Great Recession: An Econometric Case Study"
+author: "Lester Pi"
+date: "3/18/2017"
 output:
   pdf_document: default
   latex_engine: xelatex
@@ -46,71 +47,61 @@ opts_chunk$set(tidy.opts = list(width.cutoff = 60), tidy = TRUE)
 opts_chunk$set(dev = 'pdf')
 ```
 
-#outline
-intro
-data set explantions
-  yelp data
-  fred
-analysis
-  yelp users time series
-  yelp reviews time series
-  yelp review stars time series
-  fred data for recession analysis
-  yelp stock data
-conclusion 
 
 #Abstract
 
-
+This is a case study into Yelp restaurant-goers' consumer behavior during The Great Recession based off data from the Yelp Dataset Challenge 9. By manipulating and transforming the dataset, I rebuilt the relevant data into an econometric framework. Combined with a very light semantic analysis, we are able to see how consumer behavior changed during The Great Recession. With this information and econometric models, we can effectively determine how restaurant-goers' behavior will change in the event of a future recession.
 
 #Introduction
 
-This is a case study into Yelp restaurantgoers' consumer behavior during The Great Recession based off the Yelp Challenge 9.
+Yelp is a platform where users can review businesses based off a star system, with one star being the lowest and five stars being the highest. Along with the review, users write their thoughts about it which typically include why they feel the business earned the score they gave it. Another key feature of Yelp is business information that includes attributes such as price, business type, and location.
+
+The Great Recession hit in December 2007 and lasted until June 2009 and was related to the financial crisis of 2007-08 and subprime mortgage crisis of 2007-09. One of the key aspects from a consumer standpoint is the Consumer Price Index (CPI), which is an indexed measure of prices and purchasing power. According to the Federal Reserve Economic Data of St. Louis (FRED), the CPI for urban food and beverages increases during the most of the recession, but declines towards the end. In other words, purchasing power was weaker during most of the recession.
+
+#Motivation
+
+I wanted to focus on the restaurant industry for three main reasons: Yelp is very well-known for their restaurant reviews, I majoritively use Yelp for restaurant reviews, and I have a personal interest in the food and restaurant world. The Great Recession sets the stage for a great case study in that it was recent enough to occur after Yelp's conception and this also allows to account for systematic time differences. It was also a very interesting recession since it had huge ramifications both domestically and worldwide.
+
+If restaurant Yelpers' behavior during and around The Great Recession period can be modeled, then we can apply this model to a future recession. Depending on the results, this can have important insights for restaurants who are looking to survive, or perhaps even take advantage of, a recession.
 
 
-#Data Sets
+#Datasets
 
-Yelp Challenge 9: 
+The following are the datasets which I used in this case study.
 
-FRED: 
+Yelp Dataset Challenge 9: Contains a selective subset of Yelp data covering reviews, users, businesses, tips, and check-ins. Core datasets that will be examined.
 
-Yahoo Finance: 
+FRED GDP: U.S. Real GDP data pulled from FRED. Used to examine The Great Recession.
 
-BEA: 
+Yahoo Finance Yelp Stock: Yelp's adjusted closure stock price. Used to measure Yelp company success and performance.
+
+BEA Restaurant Expenditures: Seasonally adjusted real restaurant expenditures from The BEA. Used to connect Yelp restaurant data with a generalized restaurant industry.
+
+#Data Work Oveview
+
+The Yelp data came in large Json files that needed to be converted into R-workable dataframes. Once in a workable format, I explored the data and extracted the relevant information. Regular expressions were used to analyze large groups of text when only a small specific portion was needed. By using SQL queries, I subsetted the interesting data into the needed date ranges and the associated categories, such as by geography and business type.
+
+The other data sets were pulled from their sources, either manually or through R, and formatted and transformed accordingly.
+
+Most of the data is either transformed into growth rates, detrended and/or seasonally adjusted, or kept in original levels.
 
 
 #Challenges and Data Issues Addressed
 
-Early Yelp data is not very good
-Most recent Yelp data does not include entire month
+1. Yelp Data has a disproportionate amount of observations during its early days as well as the latest month due to not having a complete month's worth of data. This can cause statistical insignificance and heteroskedasticity. In order to prevent this, I omitted some of the earliest and latest data.
 
-subset relevant data from begining of 2006 to end of 2016
+2. Almost everything is a affected by endogeneity. I tried to prove or disprove what I thought could be a potential instrumental variable that could be used to reduce endogeneity.
 
-Recession only happened in US, data from worldwide
+3. The Yelp data is a Yelp-decided subset of their data. This can cause large selection bias. I examined the data and saw that it includes small, medium, and large cities alike. There is no way to obtain the unreleased portion of data.
 
-#Motivation
-If restaurant Yelpers' behavior during and aroud The Great Recession period can be modeled,then there can be conclusions about Yelpers' behavior. If recessionary behavior can be understood, then restaurants can react accordingly.
-
-#The Process
-
-After gathering the data, I examined all the potentially relevant information.
-
-Then gathered any additional data that may help
-
-Then test to see if assumptions about the inner workings and dynamics were true
-
-Finally, try to model the consumer's behavior
+4. Level sets vs. growth rates. Growth rates allow our data to be transformed into stationary (or nearly stationary) data. However, they do not always make intuitive sense for this case study. Therefore, I used the levels for creating linear models, but used growth rates for determining Granger causality.
 
 
-```{r}
+```{r, warning=FALSE}
 #SETUP
 setwd("C:/cygwin64/home/Lester/yelp_challenge_9")
 
-#load data example
-#json_file = file("yelp_academic_dataset_checkin.json")
-#json_data = jsonlite::stream_in(json_file)
-#head(json_data)
-#length(json_data$business_id)
+
 
 load_json = function(filename){
   json_file = file(filename)
@@ -118,11 +109,7 @@ load_json = function(filename){
   return(json_data)
 }
 
-#business = load_json("yelp_academic_dataset_business.json")
-#review = load_json("yelp_academic_dataset_review.json")
-#checkin = load_json("yelp_academic_dataset_checkin.json")
-#tip = load_json("yelp_academic_dataset_tip.json")
-#user = load_json("yelp_academic_dataset_user.json")
+
 
 remove_lists_from_df = function(df){
   i=1
@@ -153,9 +140,58 @@ add_recession_dummy = function(l){
   
 }
 
+
+descriptive_stats = function(lm_mod, name){
+  par(mfrow=c(3,2))
+  rec = recresid(resid(lm_mod)~1,col="skyblue3")
+  plot(resid(lm_mod))
+  truehist(resid(lm_mod))
+  print(resettest(lm_mod))
+  acf(resid(lm_mod))
+  pacf(resid(lm_mod))
+  jarque.bera.test(resid(lm_mod))
+  plot(efp(resid(lm_mod)~1,type="Rec-CUSUM"))
+  plot(rec,pch=16)
+  abline(h=0,col="red")
+  title(paste("Descriptive Statistics:",name,sep=" "),outer=TRUE)
+}
+
+test_stationary = function(t){
+  print(kpss.test(t))
+  print(adf.test(t))
+}
+
+test_cointegration = function(resid){
+  print(test_stationary(resid))
+}
+
+#dollar sign extractor
+get_dollar_signs=function(s){
+  temp=str_extract(s,"RestaurantsPriceRange2(.*?)[0-9]")
+  return(substr(temp,nchar(temp),nchar(temp)))
+}
+
+buildCorpus = function(data, stem){
+  corpus = Corpus(VectorSource(data))
+  corpus = tm_map(corpus, content_transformer(tolower))
+  corpus = tm_map(corpus, PlainTextDocument)
+  corpus = tm_map(corpus, removePunctuation)
+  corpus = tm_map(corpus, removeWords, stopWords)
+  if(stem==1) corpus = tm_map(corpus, stemDocument)
+  return(corpus)
+}
+
+buildWordCloud = function(corpus, pal,val, name){
+  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
+}
+
 ```
 
-#user data
+
+#Does Yelp Performance Affect the Userbase?
+
+First, I will explore the Yelp stock data to see if it is of any relevance in an attempt to handle any cases of endogeneity. In this case, the stock data will be a representation of the company performance. Intuitively, there is a chance it may be an instrumental variable such that the better the company is doing, the more they can advertise to, accumulate, and support a larger userbase.
+
 ```{r, include=FALSE, message=FALSE}
 user = load_json("yelp_academic_dataset_user.json")
 colnames(user)
@@ -180,11 +216,7 @@ stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
 ```
 
 
-#Users, Stocks, & Reviews
-
-First, I will explore the Yelp stock data to see if it is of any relevance in an attempt to handle any cases of endogeneity.
-
-```{r}
+```{r, warning=FALSE}
 plot(stock_users,type="l",ylab="New Users",xlab="Date", main= "New User Acounts by Month")
 
 yelp_stock = get.hist.quote("YELP",end="2017-01-30",quote="AdjClose",compression="m")
@@ -192,27 +224,12 @@ yelp_stock = get.hist.quote("YELP",end="2017-01-30",quote="AdjClose",compression
 
 plot(yelp_stock,ylab= "Adjusted Close",xlab="Date",main="Yelp Stock")
 
-test_stationary = function(t){
-  print(kpss.test(t))
-  print(adf.test(t))
-}
-
-test_cointegration = function(resid){
-  print(test_stationary(resid))
-}
-
 test_stationary(ts(stock_users$coredata.ts_m.,start=c(2012,3),freq=12))
 test_stationary(yelp_stock)
 
 log_user_growth = as.data.frame(diff(log(stock_users$coredata.ts_m.)))
 
 log_yelp_growth = as.data.frame(diff(log(yelp_stock)))
-
-# log_user_growth
-# log_yelp_growth
-
-
-
 
 ts_users = ts(log_user_growth,start=c(2012,4),freq=12)
 test_stationary(ts_users)
@@ -226,45 +243,32 @@ vm=VAR(combined,p=select$select[1])
 # plot(vm$y)
 summary(vm)
 
-grangertest(ts_users~ts_yelp)
-
-#users and stock no effects
-
-# sp500 = get.hist.quote("^GSPC",quote="AdjClose",compression="m",start=as.Date("2012-03-01","%Y-%m-%d"),end=as.Date("2017-01-30","%Y-%m-%d"))
-# 
-# # sp500
-# test_stationary(sp500)
-# 
-# log_sp500_growth = as.data.frame(diff(log(sp500)))
-# ts_sp500 = ts(log_sp500_growth,start=c(2012,4),freq=12)
-# # ts_sp500
-# test_stationary(ts_sp500)
-# 
-# # ts_yelp
-# # ts_sp500
-# 
-# 
-# plot(ts_users,col="blue")
-# lines(ts_yelp,col="red")
-# 
-# combined = cbind(ts_yelp,ts_sp500)
-# 
-# select=VARselect(combined,lag.max=12,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-# 
-# vm=VAR(combined,p=select$select[1])
-# 
-# plot(vm$y)
-# 
-# summary(vm)
-
+grangertest(ts_users~ts_yelp,order=select$select[1])
+grangertest(ts_yelp~ts_users,order=select$select[1])
 
 
 ```
 
-Growth rate of users do not have an effect on the stock value of Yelp - no correlation to stock market. good! This elinates the possibility that effects are due to yelp as a company doing good or bad. Eliminate stock data from our study
+The number of new users do not have an effect on the stock value of Yelp and vice versa. This allows to eliminate the stock value as an instrumental variable.
 
 
-#review scores and gdp
+
+```{r, warning=FALSE}
+#remove user data to save memory
+
+rm(user)
+rm(subset_users)
+rm(users_by_date_all)
+rm(users_by_date)
+rm(users_by_date_xts)
+rm(users_df)
+rm(stock_users)
+
+```
+
+#Connecting Users and Reviews
+
+We will attempt to connect new users with new reviews.
 
 ```{r, include=FALSE, message=FALSE}
 
@@ -288,6 +292,10 @@ colnames(restaurant_reviews_all) = c("review_id","user_id","b_id","stars","date"
 #use this for reviews, start from 2006 for larger sample sizes (<2006 extremely low sample sizes & heterskedasticity)
 restaurant_reviews = with(restaurant_reviews_all, restaurant_reviews_all[(restaurant_reviews_all$date >= "2006" & restaurant_reviews_all$date < "2017"), ])
 
+rm(review)
+rm(sanity_state)
+rm(restaurants)
+rm(restaurant_reviews_all)
 
 review_date_star = as.data.frame(restaurant_reviews$date)
 review_date_star$stars = restaurant_reviews$stars
@@ -304,8 +312,9 @@ review_counts_by_date = sqldf("select date, count(date) from review_date_star gr
 
 ```
 
-```{r}
-plot(review_counts_by_date$date,review_counts_by_date$`count(date)`,type="l")
+
+```{r, warning=FALSE}
+# plot(review_counts_by_date$date,review_counts_by_date$`count(date)`,type="l")
 
 #convert to monthly
 reviews_by_date=xts(review_counts_by_date$`count(date)`, as.Date(review_counts_by_date$date,"%Y-%m-%d"))
@@ -346,9 +355,22 @@ grangertest(log_user_count~log_rev_count,order=select$select[1])
 user_rev_lm=lm(log_rev_count~log_user_count)
 summary(user_rev_lm)
 
+descriptive_stats(user_rev_lm, "User Reviews on User Counts (dlog)")
+
 test_cointegration(resid(user_rev_lm))
 
 #users and num reviews granger cause each other and are cointegrated, just use one
+
+```
+
+Through the VAR model results, Granger causality test, and cointegration test, we can conclude that users and reviews can be used interchangably. The error descriptive statistics do not look perfect, but we just want to see if reviews can be used in place of users. From here on out, we will focus on reviews since reviews contain more valuable information than the user data.
+
+#Do Review Scores Change?
+
+By examining review scores, we can see if people become more or less critical during the recession, and many other insights.
+
+```{r, warning=FALSE}
+
 
 #stars by month
 stars_by_date=xts(review_date_star$stars, as.Date(review_date_star$date,"%Y-%m-%d"))
@@ -359,12 +381,14 @@ df_stars = data.frame(date=index(df_stars_m), coredata(df_stars_m))
 df_stars$avg = df_stars$coredata.df_stars_m./df_rev_count$coredata.df_rev_m.
 # head(df_stars)
 
+par(mfrow=c(1,1))
 plot(df_stars$date,df_stars$avg,type = "l",xlab="Date",ylab="Average Review Scores",main="Average Review Scores by Month")
 #evidence of recession in stars
 stars_recession_dummy = add_recession_dummy(df_stars$date)
 stars_avg=df_stars$avg
 stars_lm=lm(stars_avg~stars_recession_dummy)
 summary(stars_lm)
+descriptive_stats(stars_lm, "Average Stars on Recession")
 
 
 
@@ -373,7 +397,7 @@ test_stationary(df_stars$avg)
 df_stars_diff_log = as.data.frame(diff(log(df_stars$avg)))
 df_stars_diff_log$date=df_stars$date[2:length(df_stars$date)]
 
-df_stars_diff_log
+# df_stars_diff_log
 colnames(df_stars_diff_log)=c("avg","date")
 
 test_stationary(df_stars_diff_log$avg)
@@ -384,12 +408,12 @@ stars_recession_diff_log_dummy = add_recession_dummy(df_stars_diff_log$date)
 # stars_reg = lm(df_stars_diff_log$avg ~ stars_recession_diff_log_dummy)
 # summary(stars_reg)
 
-plot(df_stars_diff_log$date,df_stars_diff_log$avg,type="l",main="Growth Rate of Review Scores by Month",xlab="Date",ylab="Review Scores Growth Rate")
-
-stars_diff_log_avg = df_stars_diff_log$avg
-stars_diff_log_lm = lm(stars_diff_log_avg~stars_recession_diff_log_dummy)
-summary(stars_diff_log_lm)
-
+# plot(df_stars_diff_log$date,df_stars_diff_log$avg,type="l",main="Growth Rate of Review Scores by Month",xlab="Date",ylab="Review Scores Growth Rate")
+# 
+# stars_diff_log_avg = df_stars_diff_log$avg
+# stars_diff_log_lm = lm(stars_diff_log_avg~stars_recession_diff_log_dummy)
+# summary(stars_diff_log_lm)
+# descriptive_stats(stars_diff_log_lm)
 
 #however, intuitively we should be looking at level, not growth rates
 #so lets detrend the data and season
@@ -399,49 +423,26 @@ ts_stars = ts(df_stars$avg,start=c(2006,2),freq=12)
 stars_tslm = tslm(ts_stars~trend+season)
 summary(stars_tslm)
 
+
 # plot(ts_stars)
 # lines(stars_tslm$fitted.values,col="red")
 
 detrend_stars = resid(stars_tslm)
+par(mfrow=c(1,1))
 plot(detrend_stars, main="Detrended & Seasonally Adjusted Review Scores by Month",ylab = "Average Review Score")
 
 detrend_stars_lm=lm(detrend_stars~stars_recession_dummy)
 summary(detrend_stars_lm)
+descriptive_stats(detrend_stars_lm, "Average Stars Adjusted on Recession")
 
 
 
 
 ```
 
-the growth rates plot shows that even during recession we don't see a dip in either. if there was constant account creation but a dip in reviews, that would mean the recession has an effect on num of reviews
+The regression results cannot be trusted because the error statistics are all over the place. No conclusion can be made yet.
 
-
-
-
-
-
-#descriptive stats of reviews and stars
-
-```{r}
-sd(df_rev_count$coredata.df_rev_m.)
-mean(df_rev_count$coredata.df_rev_m.)
-
-
-sd(log_rev_count)
-mean(log_rev_count)
-
-
-sd(df_stars$avg)
-mean(df_stars$avg)
-
-```
-
-#fred data
-
-```{r}
-
-
-
+```{r, warning=FALSE}
 
 #real gdp
 getSymbols('GDPC96', src = 'FRED')
@@ -481,12 +482,12 @@ vm_gdp=VAR(gdp_combined,p=12)
 # plot(vm_gdp$y)
 summary(vm_gdp)
 
-#do a var on quarterly gdp growth and quarterly avg review score
 
 recession_dummy_reviews_q = add_recession_dummy(df_rev_quarter$date)
 
 reg_reviews = lm(df_rev_quarter$coredata.df_rev_m_quarter.~recession_dummy_reviews_q)
 summary(reg_reviews)
+descriptive_stats(reg_reviews, "Quartly Reviews on Recession")
 #first reg is misleading because trend
 
 
@@ -497,28 +498,21 @@ rec_dummy_rev_growth_q = recession_dummy_reviews_q[2:length(recession_dummy_revi
 
 reg_log_reviews = lm(log_rev_quarter~rec_dummy_rev_growth_q)
 summary(reg_log_reviews)
-
-#use lm
-log_reviews_lm = lm(log_rev_quarter~rec_dummy_rev_growth_q)
-summary(log_reviews_lm)
+descriptive_stats(reg_log_reviews, "Quarterly Reviews on Recession (log)")
 
 ```
 
+It looks that using the growth rates are better suited based off the error descriptive statistics, but we want to examine the social dynamics and not reviews as a whole.
 
+Let's continue by splitting the restaurants by dollar signs (\$).
 
+#Examining Restaurants by Prices
 
-#examine social dynamics during recessions through dollar signs as well as review texts
-do people eat at cheaper places? do people care more about overpriced food?
+How do people react to prices during a recession? To examine this, we will subset our data into 4 categories by price, one for each price level. This will be refered to as how many dollar signs (\$) a business is.
+
 ```{r, include=FALSE, message=FALSE}
 #convert $ dollar signs to time series
 restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes, restaurant_reviews.stars from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
-
-#dollar sign extractor
-get_dollar_signs=function(s){
-  temp=str_extract(s,"RestaurantsPriceRange2(.*?)[0-9]")
-  return(substr(temp,nchar(temp),nchar(temp)))
-}
-
 
 restaurant_dollars=data.frame(restaurant_visits$date)
 restaurant_dollars$dollars = get_dollar_signs(restaurant_visits$attributes)
@@ -540,7 +534,7 @@ dollars_gbd_4 = sqldf("select date, count(date) from dollars_4 group by date ord
 
 ```
 
-```{r}
+```{r, warning=FALSE}
 
 dollars_1_xts=xts(dollars_gbd_1$`count(date)`, as.Date(dollars_gbd_1$date,"%Y-%m-%d"))
 df_d_1 = apply.monthly(dollars_1_xts, sum)
@@ -575,7 +569,7 @@ recession_dummy_dollars_m = add_recession_dummy(df_dollars_1$date)
 
 
 
-```{r}
+```{r, warning=FALSE}
 df_dollars_1_dlog = as.data.frame(diff(log(df_dollars_1$coredata.df_d_1.)))
 df_dollars_2_dlog = as.data.frame(diff(log(df_dollars_2$coredata.df_d_2.)))
 df_dollars_3_dlog = as.data.frame(diff(log(df_dollars_3$coredata.df_d_3.)))
@@ -599,17 +593,17 @@ rect(2007.9166667, -1000, 2009.5, 7000, col=rgb(red=150/255,green=25/255,blue=25
 plot(ts_dollar_4,type="l",xlab="Date",ylab="New Reviews", main="New Reviews of $$$$ Restaurants")
 rect(2007.9166667, -1000, 2009.5, 2000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 
-
-dollars_1_dlog=diff(log(ts_dollar_1))
-dollars_2_dlog=diff(log(ts_dollar_2))
-dollars_3_dlog=diff(log(ts_dollar_3))
-dollars_4_dlog=diff(log(ts_dollar_4))
-
-par(mfrow=c(2,2))
-plot(dollars_1_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $ Restaurants")
-plot(dollars_2_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$ Restaurants")
-plot(dollars_3_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$ Restaurants")
-plot(dollars_4_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$$ Restaurants")
+# 
+# dollars_1_dlog=diff(log(ts_dollar_1))
+# dollars_2_dlog=diff(log(ts_dollar_2))
+# dollars_3_dlog=diff(log(ts_dollar_3))
+# dollars_4_dlog=diff(log(ts_dollar_4))
+# 
+# par(mfrow=c(2,2))
+# plot(dollars_1_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $ Restaurants")
+# plot(dollars_2_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$ Restaurants")
+# plot(dollars_3_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$ Restaurants")
+# plot(dollars_4_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Reviews Growth Rate of $$$$ Restaurants")
 
 #we can see highly seasonal
 
@@ -617,11 +611,10 @@ plot(dollars_4_dlog,xlab="Date",ylab="New Reviews Growth Rate", main="New Review
 
 ```
 
+There is a strong and obvious trend along with seasonality. This is something that should be wiped out as much as possible to see the true effect of the recession.
 
 
-#seasonally adjust the data
-
-```{r}
+```{r, warning=FALSE}
 
 #seasonally adjust data and remove trend
 
@@ -636,6 +629,7 @@ rect(2007.9166667, -3000, 2009.5, 3000, col=rgb(red=150/255,green=25/255,blue=25
 lm_d1_adj = lm(tslm_d1_resid~recession_dummy_dollars_m)
 summary(lm_d1_adj)
 
+
 tslm_d2 = tslm(ts_dollar_2~trend+season)
 #summary(tslm_d1)
 tslm_d2_resid = resid(tslm_d2)
@@ -643,6 +637,7 @@ plot(tslm_d2_resid,xlab="Date",ylab="New Reviews",main="Adjusted Reviews, $$")
 rect(2007.9166667, -7000, 2009.5, 7000, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA)
 lm_d2_adj = lm(tslm_d2_resid~recession_dummy_dollars_m)
 summary(lm_d2_adj)
+
 
 tslm_d3 = tslm(ts_dollar_3~trend+season)
 #summary(tslm_d1)
@@ -652,6 +647,7 @@ rect(2007.9166667, -500, 2009.5, 500, col=rgb(red=150/255,green=25/255,blue=25/2
 lm_d3_adj = lm(tslm_d3_resid~recession_dummy_dollars_m)
 summary(lm_d3_adj)
 
+
 tslm_d4 = tslm(ts_dollar_4~trend+season)
 #summary(tslm_d1)
 tslm_d4_resid = resid(tslm_d4)
@@ -660,112 +656,44 @@ rect(2007.9166667, -500, 2009.5, 500, col=rgb(red=150/255,green=25/255,blue=25/2
 lm_d4_adj = lm(tslm_d4_resid~recession_dummy_dollars_m)
 summary(lm_d4_adj)
 
+descriptive_stats(lm_d1_adj, "New Reviews ($) on Recession")
+descriptive_stats(lm_d2_adj, "New Reviews ($$) on Recession")
+descriptive_stats(lm_d3_adj, "New Reviews ($$$) on Recession")
+descriptive_stats(lm_d4_adj, "New Reviews ($$$$) on Recession")
+
 ```
 
+The regression results and error descriptive statistics do not look too promising, but could be leading in the right direction.
 
+Let's try to make it better.
 
-<!-- ```{r} -->
+#Making a Better Model
 
+By controlling for the aggegated number of reviews between dollar signs, we can eliminate the effect that a drop in aggregated reviews (again, by dollar signs) can potentially have.
 
-<!-- #growth -->
-<!-- tslm_d1_growth = tslm(dollars_1_dlog~trend+season) -->
-<!-- #summary(tslm_d1) -->
-<!-- tslm_d1_growth_resid = resid(tslm_d1_growth) -->
-<!-- plot(tslm_d1_growth_resid) -->
-<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
-<!-- lm_d1_growth_adj = lm(tslm_d1_growth_resid~lm_dollars_recession_dummy) -->
-<!-- summary(lm_d1_growth_adj) -->
-
-<!-- tslm_d2_growth = tslm(dollars_2_dlog~trend+season) -->
-<!-- #summary(tslm_d1) -->
-<!-- tslm_d2_growth_resid = resid(tslm_d2_growth) -->
-<!-- plot(tslm_d2_growth_resid) -->
-<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
-<!-- lm_d2_growth_adj = lm(tslm_d2_growth_resid~lm_dollars_recession_dummy) -->
-<!-- summary(lm_d2_growth_adj) -->
-
-<!-- tslm_d3_growth = tslm(dollars_3_dlog~trend+season) -->
-<!-- #summary(tslm_d1) -->
-<!-- tslm_d3_growth_resid = resid(tslm_d3_growth) -->
-<!-- plot(tslm_d3_growth_resid) -->
-<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
-<!-- lm_d3_growth_adj = lm(tslm_d3_growth_resid~lm_dollars_recession_dummy) -->
-<!-- summary(lm_d3_growth_adj) -->
-
-<!-- tslm_d4_growth = tslm(dollars_4_dlog~trend+season) -->
-<!-- #summary(tslm_d1) -->
-<!-- tslm_d4_growth_resid = resid(tslm_d4_growth) -->
-<!-- plot(tslm_d4_growth_resid) -->
-<!-- rect(2007.9166667, -1, 2009.4166667, 1, col=rgb(red=150/255,green=25/255,blue=25/255,alpha=.3), border=NA) -->
-<!-- lm_d4_growth_adj = lm(tslm_d4_growth_resid~lm_dollars_recession_dummy) -->
-<!-- summary(lm_d4_growth_adj) -->
-
-<!-- ``` -->
-
-
-
-<!-- ```{r} -->
-
-<!-- #percentages -->
-<!-- ts_dollar_total = ts_dollar_1+ts_dollar_2+ts_dollar_3+ts_dollar_4 -->
-<!-- ts_d1_per = ts_dollar_1/ts_dollar_total -->
-<!-- ts_d2_per = ts_dollar_2/ts_dollar_total -->
-<!-- ts_d3_per = ts_dollar_3/ts_dollar_total -->
-<!-- ts_d4_per = ts_dollar_4/ts_dollar_total -->
-
-<!-- plot(ts_d1_per) -->
-<!-- plot(ts_d2_per) -->
-<!-- plot(ts_d3_per) -->
-<!-- plot(ts_d4_per) -->
-
-<!-- tslm_d1_per = tslm(ts_d1_per~trend+season) -->
-<!-- tslm_d1_per_resid = resid(tslm_d1_per) -->
-<!-- plot(tslm_d1_per_resid) -->
-<!-- lm_d1_per_adj = lm(tslm_d1_per_resid~recession_dummy_dollars_m) -->
-<!-- summary(lm_d1_per_adj) -->
-
-<!-- tslm_d2_per = tslm(ts_d2_per~trend+season) -->
-<!-- tslm_d2_per_resid = resid(tslm_d2_per) -->
-<!-- plot(tslm_d2_per_resid) -->
-<!-- lm_d2_per_adj = lm(tslm_d2_per_resid~recession_dummy_dollars_m) -->
-<!-- summary(lm_d2_per_adj) -->
-
-<!-- tslm_d3_per = tslm(ts_d3_per~trend+season) -->
-<!-- tslm_d3_per_resid = resid(tslm_d3_per) -->
-<!-- plot(tslm_d3_per_resid) -->
-<!-- lm_d3_per_adj = lm(tslm_d3_per_resid~recession_dummy_dollars_m) -->
-<!-- summary(lm_d3_per_adj) -->
-
-<!-- tslm_d4_per = tslm(ts_d4_per~trend+season) -->
-<!-- tslm_d4_per_resid = resid(tslm_d4_per) -->
-<!-- plot(tslm_d4_per_resid) -->
-<!-- lm_d4_per_adj = lm(tslm_d4_per_resid~recession_dummy_dollars_m) -->
-<!-- summary(lm_d4_per_adj) -->
-
-
-<!-- ``` -->
-
-#introduce num of reviews into model
-control for number of new reviews, to make sure that the recession dummy doesn't accidentally capture an effect from new review numbers, in other words if the number of reviews dropped it would make sense that the number of reviews for a certain amount of dollar signs drops too
-
-```{r}
+```{r, warning=FALSE}
 #levels
 lm_d1_adj_rev = lm(tslm_d1_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d1_adj_rev)
+descriptive_stats(lm_d1_adj_rev, "New Reviews ($) on Recession and New Reviews (All)")
 
 lm_d2_adj_rev = lm(tslm_d2_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d2_adj_rev)
+descriptive_stats(lm_d2_adj_rev, "New Reviews ($$) on Recession and New Reviews (All)")
 
 lm_d3_adj_rev = lm(tslm_d3_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d3_adj_rev)
+descriptive_stats(lm_d3_adj_rev, "New Reviews ($$$) on Recession and New Reviews (All)")
 
 lm_d4_adj_rev = lm(tslm_d4_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d4_adj_rev)
+descriptive_stats(lm_d4_adj_rev, "New Reviews ($$$$) on Recession and New Reviews (All)")
 
 ```
 
+Adding new reviews in doesn't help much, but what about if we detrend and seasonally adjust?
 
-```{r}
+```{r, warning=FALSE}
 #detrend review counts
 
 ts_rev_count=ts(df_rev_count$coredata.df_rev_m.,start=c(2006,2),freq=12)
@@ -777,15 +705,19 @@ rect(2007.9166667, -9000, 2009.5, 9000, col=rgb(red=150/255,green=25/255,blue=25
 
 lm_d1_adj_rev_adj = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj)
 summary(lm_d1_adj_rev_adj)
+descriptive_stats(lm_d1_adj_rev_adj, "New Reviews ($) on Recession and New Reviews Adjusted (All)")
 
 lm_d2_adj_rev_adj = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj)
 summary(lm_d2_adj_rev_adj)
+descriptive_stats(lm_d2_adj_rev_adj, "New Reviews ($$) on Recession and New Reviews Adjusted (All)")
 
 lm_d3_adj_rev_adj = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj)
 summary(lm_d3_adj_rev_adj)
+descriptive_stats(lm_d3_adj_rev_adj, "New Reviews ($$$) on Recession and New Reviews Adjusted (All)")
 
 lm_d4_adj_rev_adj = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj)
 summary(lm_d4_adj_rev_adj)
+descriptive_stats(lm_d4_adj_rev_adj, "New Reviews ($$$$) on Recession and New Reviews Adjusted (All)")
 
 vif(lm_d1_adj_rev_adj)
 vif(lm_d2_adj_rev_adj)
@@ -794,8 +726,17 @@ vif(lm_d4_adj_rev_adj)
 
 ```
 
+Although not perfect, using detrended and seasonally adjusted data for the new reviews improves our results drastically. We finally have results that can be trustworthy.
 
-#re examine stars, but subset by dollar signs
+So what do our new results tell us?
+
+We see a decrease in (\$\$\$\$) and (\$\$\$) reviews, but an increase in (\$\$) reviews. Not only do people prefer (\$\$) restaurants over the more expensive (\$\$\$) and (\$\$\$\$) restaurants, it seems that customers who would originally have dined at the more expensive eateries are now choosing the less expensive (\$\$) restaurants. A surprising results is that the least expensive (\$) restaurants do not see a significant change. This could be because inexpensive (\$) restauarants are not substitutes for the others while the (\$\$) restaurants can be substitutes for (\$\$\$) and (\$\$\$\$) restaurants.
+
+Since reviews can be modeled when broken down by prices, this gives more promise to the previous review score analysis as long as it is also broken down in the same way.
+
+#Breaking Down Review Scores by Price
+
+After splitting our reviews by prices, a re-examination of review scores is due.
 
 ```{r, include=FALSE, message=FALSE}
 
@@ -819,7 +760,7 @@ dollars_obd_4_star = sqldf("select date, stars from dollars_4_star order by date
   
 ```
 
-```{r}
+```{r, warning=FALSE}
 
 par(mfrow=c(2,2))
 
@@ -831,6 +772,7 @@ plot(df_dollars_1_star$date,df_dollars_1_star$avg,xlab="Date",ylab="Average Star
 d1_star_lm = lm(df_dollars_1_star$avg~recession_dummy_dollars_m)
 summary(d1_star_lm)
 
+
 dollars_2_star_xts=xts(dollars_obd_2_star$stars, as.Date(dollars_obd_2_star$date,"%Y-%m-%d"))
 df_d_2_star = apply.monthly(dollars_2_star_xts, sum)
 df_dollars_2_star = data.frame(date=index(df_d_2_star), coredata(df_d_2_star))
@@ -838,6 +780,7 @@ df_dollars_2_star$avg = df_dollars_2_star$coredata.df_d_2_star./df_dollars_2$cor
 plot(df_dollars_2_star$date,df_dollars_2_star$avg,xlab="Date",ylab="Average Star Rating",main="Average Rating for $$ Restaurants")
 d2_star_lm = lm(df_dollars_2_star$avg~recession_dummy_dollars_m)
 summary(d2_star_lm)
+
 
 dollars_3_star_xts=xts(dollars_obd_3_star$stars, as.Date(dollars_obd_3_star$date,"%Y-%m-%d"))
 df_d_3_star = apply.monthly(dollars_3_star_xts, sum)
@@ -847,6 +790,7 @@ plot(df_dollars_3_star$date,df_dollars_3_star$avg,xlab="Date",ylab="Average Star
 d3_star_lm = lm(df_dollars_3_star$avg~recession_dummy_dollars_m)
 summary(d3_star_lm)
 
+
 dollars_4_star_xts=xts(dollars_obd_4_star$stars, as.Date(dollars_obd_4_star$date,"%Y-%m-%d"))
 df_d_4_star = apply.monthly(dollars_4_star_xts, sum)
 df_dollars_4_star = data.frame(date=index(df_d_4_star), coredata(df_d_4_star))
@@ -855,59 +799,62 @@ plot(df_dollars_4_star$date,df_dollars_4_star$avg,xlab="Date",ylab="Average Star
 d4_star_lm = lm(df_dollars_4_star$avg~recession_dummy_dollars_m)
 summary(d4_star_lm)
 
+
+descriptive_stats(d1_star_lm, "Average Rating ($) on Recession")
+descriptive_stats(d2_star_lm, "Average Rating ($$) on Recession")
+descriptive_stats(d3_star_lm, "Average Rating ($$$) on Recession")
+descriptive_stats(d4_star_lm, "Average Rating ($$$$) on Recession")
+
 #looks like the stars dropping during a recession was only in 1 and 2 dollar signs restaurants
 
 ```
 
+The results look better, but still are not that great. If we are to interpret the regression anyways, however, it looks as if the lower priced restaurants have lower review scores. This could be a sign of many things, such as the substituters from (\$\$\$) and (\$\$\$\$) restaurants having higher expectations or people just want more bang for their buck. The higher priced restaurants do not see a change, which could be due to the type of people who still dine there during recessions. They could be part of the group unaffected by the recession.
 
-#how bout use stars in reg for dolla dolla
-```{r}
-
-
-
-lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg)
-summary(lm_d1_adj_rev_adj_star)
-
-lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg)
-summary(lm_d2_adj_rev_adj_star)
-
-lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg)
-summary(lm_d3_adj_rev_adj_star)
-
-lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg)
-summary(lm_d4_adj_rev_adj_star)
-
-vif(lm_d1_adj_rev_adj_star)
-vif(lm_d2_adj_rev_adj_star)
-vif(lm_d3_adj_rev_adj_star)
-vif(lm_d4_adj_rev_adj_star)
-
-#not really a difference, star ratings dynamics not really linked to review numbers, but both effected by rec in dif ways
-
-
-```
+<!-- #how bout use stars in reg for dolla dolla -->
+<!-- ```{r, warning=FALSE} -->
 
 
 
-#comment out for now, cuz takes too long to process
+<!-- lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg) -->
+<!-- summary(lm_d1_adj_rev_adj_star) -->
 
 
-analyze word usages
-```{r}
+<!-- lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg) -->
+<!-- summary(lm_d2_adj_rev_adj_star) -->
 
-buildCorpus = function(data, stem){
-  corpus = Corpus(VectorSource(data))
-  corpus = tm_map(corpus, content_transformer(tolower))
-  corpus = tm_map(corpus, PlainTextDocument)
-  corpus = tm_map(corpus, removePunctuation)
-  corpus = tm_map(corpus, removeWords, stopWords)
-  if(stem==1) corpus = tm_map(corpus, stemDocument)
-  return(corpus)
-}
 
-buildWordCloud = function(corpus, pal,val, name){
-  wordcloud(corpus, max.words = 75, random.order = FALSE, colors=brewer.pal(val,pal), main = name)
-}
+<!-- lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg) -->
+<!-- summary(lm_d3_adj_rev_adj_star) -->
+
+
+<!-- lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg) -->
+<!-- summary(lm_d4_adj_rev_adj_star) -->
+
+
+<!-- descriptive_stats(lm_d1_adj_rev_adj_star) -->
+<!-- descriptive_stats(lm_d2_adj_rev_adj_star) -->
+<!-- descriptive_stats(lm_d3_adj_rev_adj_star) -->
+<!-- descriptive_stats(lm_d4_adj_rev_adj_star) -->
+
+<!-- vif(lm_d1_adj_rev_adj_star) -->
+<!-- vif(lm_d2_adj_rev_adj_star) -->
+<!-- vif(lm_d3_adj_rev_adj_star) -->
+<!-- vif(lm_d4_adj_rev_adj_star) -->
+
+<!-- #not really a difference, star ratings dynamics not really linked to review numbers, but both effected by rec in dif ways -->
+
+
+<!-- ``` -->
+
+
+
+#Sentiment Analysis
+
+By doing a sentiment analysis on the text in the reviews, we can see the association with words during the recession and the period of time (of equal length) directly after the recession.
+
+```{r, warning=FALSE}
+
 stopWords = removePunctuation(stopwords('SMART'))
 
 
@@ -919,6 +866,30 @@ restaurant_reviews_norec = with(restaurant_reviews, restaurant_reviews[(restaura
 corpus_reviews_rec = buildCorpus(restaurant_reviews_rec$text,0)
 dtm_rec = DocumentTermMatrix(corpus_reviews_rec)
 tidy_rec = tidy(dtm_rec)
+
+
+corpus_reviews_norec = buildCorpus(restaurant_reviews_norec$text,0)
+dtm_norec = DocumentTermMatrix(corpus_reviews_norec)
+tidy_norec = tidy(dtm_norec)
+```
+
+Word Clouds:
+
+```{r, warning=FALSE}
+
+par(mfrow=c(1,2))
+buildWordCloud(corpus_reviews_rec, "Spectral",8, "test")
+buildWordCloud(corpus_reviews_norec, "Spectral",8, "test2")
+
+
+```
+
+It is hard to tell which word cloud is from the recession and which is from the period after, but the one on the left is from the recession.
+
+Sentiment Visualization:
+
+```{r, warning=FALSE}
+#reference: https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
 ap_sentiments <- tidy_rec %>%
   inner_join(get_sentiments("bing"), by = c(term = "word"))
 
@@ -951,9 +922,7 @@ ap_sentiments %>%
 
 
 
-corpus_reviews_norec = buildCorpus(restaurant_reviews_norec$text,0)
-dtm_norec = DocumentTermMatrix(corpus_reviews_norec)
-tidy_norec = tidy(dtm_norec)
+
 ap_sentiments <- tidy_norec %>%
   inner_join(get_sentiments("bing"), by = c(term = "word"))
 
@@ -982,18 +951,35 @@ ap_sentiments %>%
 #percent negative: 29.75%
 #cheap: 5th
 #expensive: 8th
-par(mfrow=c(1,2))
-buildWordCloud(corpus_reviews_rec, "Spectral",8, "test")
-buildWordCloud(corpus_reviews_norec, "Spectral",8, "test2")
 
 
 ```
 
+Again, it is difficult to distinguish.
 
+The Sentiment visualization on the top is from the recession. On closer examination of the sentiments, the following statistics are extracted.
 
+Recession:\newline
+negative: 158714\newline
+positive: 346991\newline
+percent negative: 31.4%\newline
+cheap negative word rank: 3rd\newline
+expensive negative word rank: 7th\newline
 
+Post-Recession:\newline
+negative: 733329\newline
+positive: 1731938\newline
+percent negative: 29.75%\newline
+cheap negative word rank: 5th\newline
+expensive negative word rank: 8th\newline
 
-#connect with restaurants
+There is a higher percentage of negative sentiment during the recession as well as having the words "cheap" and "expensive" rank higher for negative words. The word "cheap", however is not always used in a negative way, but it is still related to price. This shows that reviews are more concerned with price during the recession compared to the period directly following it. It should be noted that there is a large difference in the sample size of words from the two periods. This leads to a soft conclusion that reviewers are more concerned with prices during the recession, as it follows recessionary thinking.
+
+#Connecting Yelp Reviews with the Restaurant Industry
+
+By using restaurant expenditures, there can be a connection made between the review data and the actual restaurant industry.
+
+But first, lets confirm that GDP and the recession can be linked to restaurant expenditures.
 
 ```{r, include=FALSE, message=FALSE}
 
@@ -1002,7 +988,7 @@ restaurant_expenditures=read.csv("restaurant_expenditures.csv")
 
 ```
 
-```{r}
+```{r, warning=FALSE}
 
 #add x axis with dates
 rest_exp_dates = seq(as.Date("2005/12/01"), by = "quarter",length.out = 44)
@@ -1035,33 +1021,28 @@ grangertest(gdp_growth_subset[1:length(gdp_growth_subset)]~rest_real_exp_diff_lo
 rec_exp_diff_log_dummy = add_recession_dummy(rest_exp_dates_diff)
 lm_rest_real_exp_diff_log = lm(rest_real_exp_diff_log~rec_exp_diff_log_dummy)
 summary(lm_rest_real_exp_diff_log)
+descriptive_stats(lm_rest_real_exp_diff_log, "Restaurant Expenditures on Recession")
 
 ```
 
-yes gdp granger causes restaurant expenditures and recession dummy
+The assumption that restaurant expenditures are related to the recession and GDP is confirmed. GDP will not be needed in constructing a full model as restaurant expenditures will be used in its place.
 
+By seasonally adjusting the growth rate in new reviews, a Granger causality test can be run between restaurant expenditures and new reviews.
 
+```{r, warning=FALSE}
 
-#connect num of reviews with restaurants
-
-
-
-need to convert number of reviews to be on same scale as rest expenditure growth rates
-
-```{r}
-
-rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
-select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
-vm_rev_exp=VAR(rev_exp_combined,select$select[1])
-# plot(vm_rev_exp$y)
-summary(vm_rev_exp)
-
-grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
-grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
-
-
-#try to seasonally adjust
-#leave trend in because the original seasonally adjusted rest exp had a trend
+# rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
+# select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
+# vm_rev_exp=VAR(rev_exp_combined,select$select[1])
+# # plot(vm_rev_exp$y)
+# summary(vm_rev_exp)
+# 
+# grangertest(rest_real_exp_diff_log~log_rev_quarter, order=select$select[1])
+# grangertest(log_rev_quarter~rest_real_exp_diff_log, order=select$select[1])
+# 
+# 
+# #try to seasonally adjust
+# #leave trend in because the original seasonally adjusted rest exp had a trend
 
 log_rev_quarter_tslm = tslm(log_rev_quarter~ season)
 summary(log_rev_quarter_tslm)
@@ -1084,16 +1065,16 @@ rect(2007.9166667, -1, 2009.5, 1, col=rgb(red=150/255,green=25/255,blue=25/255,a
 # plot(rest_real_exp_diff_log,type="l")
 
 
-#only the lags
-lm_temp = lm(log_rev_quarter_adj~rest_real_exp_diff_log)
-
-summary(lm_temp)
 
 ```
 
+New reviews is Granger caused by restaurant expenditures. This makes sense as reviews are typically made after people visit a restaurant. This shows that the number of reviews can in fact be related to the previous restaurant expenditures.
 
-#build rest exp into the dollar signs models
-```{r}
+#Building Full Models
+
+A full model that incorporates all the previous results will be useful to show the real effect of the recession and determine if there is a causal inference that can be made.
+
+```{r, warning=FALSE}
 #convert to quarterly
 #add in rest exp
 #try var model with adding in rest exp
@@ -1144,15 +1125,19 @@ rest_exp_q_adj = resid(rest_exp_q_tslm)
 
 lm_d1_full = lm(ts_d1_quarterly~rec_q+ts_rev_count_adj_q+ts_d1_star_quarterly+rest_exp_q_adj)
 summary(lm_d1_full)
+descriptive_stats(lm_d1_full, "Full Model ($)")
 
 lm_d2_full = lm(ts_d2_quarterly~rec_q+ts_rev_count_adj_q+ts_d2_star_quarterly+rest_exp_q_adj)
 summary(lm_d2_full)
+descriptive_stats(lm_d2_full, "Full Model ($$)")
 
 lm_d3_full = lm(ts_d3_quarterly~rec_q+ts_rev_count_adj_q+ts_d3_star_quarterly+rest_exp_q_adj)
 summary(lm_d3_full)
+descriptive_stats(lm_d3_full, "Full Model ($$$)")
 
 lm_d4_full = lm(ts_d4_quarterly~rec_q+ts_rev_count_adj_q+ts_d4_star_quarterly+rest_exp_q_adj)
 summary(lm_d4_full)
+descriptive_stats(lm_d4_full, "Full Model ($$$$)")
 
 
 vif(lm_d1_full)
@@ -1161,27 +1146,45 @@ vif(lm_d3_full)
 vif(lm_d4_full)
 
 #lots of insignificance and multicollinearity
-#how about a var
 
-combinedFull1 = cbind(ts_d1_quarterly,rec_q,ts_rev_count_adj_q,ts_d1_star_quarterly,rest_exp_q_adj)
+
+```
+
+The regression results and error descriptive statistics are actually worse in this model. There is even multicolinearity occuring. The better model is actually in the form of Restaurant Review (dollars) regressed on Recession and Adjusted New Reviews.
+
+Since new reviews is Granger caused by restaurant expenditures, can we find a causal inference through comprehensive VAR models that include the "Better" model, with restaurant expenditures added in?
+
+```{r, warning=FALSE}
+
+#how about a var
+#standardize so min value is 1
+ts_d1_quarterly_growth = diff(log(ts_d1_quarterly+1-min(ts_d1_quarterly)))
+ts_d2_quarterly_growth = diff(log(ts_d2_quarterly+1-min(ts_d2_quarterly)))
+ts_d3_quarterly_growth = diff(log(ts_d3_quarterly+1-min(ts_d3_quarterly)))
+ts_d4_quarterly_growth = diff(log(ts_d4_quarterly+1-min(ts_d4_quarterly)))
+
+# rec_dummy_rev_growth_q,rest_real_exp_diff_log,log_rev_quarter_adj
+
+
+combinedFull1 = cbind(ts_d1_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull1,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar1=VAR(combinedFull1,p=select$select[1])
 plot(fullVar1$y)
 summary(fullVar1)
 
-combinedFull2 = cbind(ts_d2_quarterly,rec_q,ts_rev_count_adj_q,ts_d2_star_quarterly,rest_exp_q_adj)
+combinedFull2 = cbind(ts_d2_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull2,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar2=VAR(combinedFull2,p=select$select[1])
 plot(fullVar2$y)
 summary(fullVar2)
 
-combinedFull3 = cbind(ts_d3_quarterly,rec_q,ts_rev_count_adj_q,ts_d3_star_quarterly,rest_exp_q_adj)
+combinedFull3 = cbind(ts_d3_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull3,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar3=VAR(combinedFull3,p=select$select[1])
 plot(fullVar3$y)
 summary(fullVar3)
 
-combinedFull4 = cbind(ts_d4_quarterly,rec_q,ts_rev_count_adj_q,ts_d4_star_quarterly,rest_exp_q_adj)
+combinedFull4 = cbind(ts_d4_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull4,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar4=VAR(combinedFull4,p=select$select[1])
 plot(fullVar4$y)
@@ -1192,322 +1195,28 @@ summary(fullVar4)
 
 ```
 
+The results of the VAR models are not very assuring. They don't point to any real causal inferences. More research and work needs to be done to create a truley causal inference model.
 
+#Conclusion
 
+The most effective model has been using the amount of reviews by dollar signs and regressing them on the recession and seasonally adjusted new reviews. These models showed that there is a drop in reviews for the higher priced (\$\$\$) and (\$\$\$\$) restaurants while there is an increase in (\$\$) restaurants, with (\$) restaurants being unaffected. This means that the (\$\$) restaurants are a substitute for the more expensive restaurants and that the lowest priced (\$) restaurants are not interchangable with the other three categories.
 
+Sentiment analysis on the review text showed that there was a possibility that reviews became more negative and price focused during the recession. However, the differences in sample size and potentially statistically insignificance of the results leave the sentiment analysis without a definite answer.
 
+It was determined that the causality model was not valid and needs more research and work..
 
+#Future Work
 
+1. If possible, examine all of Yelp's data, not just the Dataset Challenge.
+2. In the event of a future recession, add the data in to create a more comprehensive model.
+3. Do a stronger NLP analysis such as bigrams or creating a timeseries of words related to prices.
+4. Improve the VAR models.
 
-old stuff
+#Sources
 
-
-
-<!-- #Exploring the Data -->
-
-
-<!-- ```{r, echo=FALSE} -->
-<!-- business = remove_lists_from_df(business) -->
-
-<!-- business_us = sqldf("select * from business where (state = 'AZ' or state = 'IL'  -->
-<!--                     or state = 'NC' or state = 'NV' or state = 'NY' or state = 'OH'  -->
-<!--                     or state = 'PA' or state = 'SC' or state = 'VT' or state = 'WI')") -->
-
-<!-- restaurants = sqldf("select * from business where categories like '%Restaurants%'") -->
-<!-- restaurants_open = sqldf("select * from restaurants where is_open=1") -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #number of states -->
-<!-- length(sqldf("select state from restaurants_open group by state")[,1]) -->
-<!-- #number of cities -->
-<!-- length(sqldf("select city, state from restaurants_open group by city")[,1]) -->
-<!-- ``` -->
-
-<!-- After examining the states and cities, there are some omissions, such as Los Angeles and New York City, that could have been extremely interesting if included. Nevertheless, let's see how the distribution of cities look. -->
-
-<!-- ```{r} -->
-<!-- city_counts = sqldf("select city, state, count(business_id) as count from restaurants_open group by city") -->
-
-<!-- #ones, 100s, 200s, ..., 1000+ -->
-<!-- buckets = c(0,0,0,0,0,0,0,0,0,0,0) -->
-
-<!-- i=1 -->
-<!-- while(i <= length(city_counts[,1])){ -->
-<!--   temp_count = city_counts$count[i] -->
-<!--   if(temp_count<100){ -->
-<!--     buckets[1]=buckets[1]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=100 & temp_count < 200){ -->
-<!--     buckets[2]=buckets[2]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=200 & temp_count < 300){ -->
-<!--     buckets[3]=buckets[3]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=300 & temp_count < 400){ -->
-<!--     buckets[4]=buckets[4]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=400 & temp_count < 500){ -->
-<!--     buckets[5]=buckets[5]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=500 & temp_count < 600){ -->
-<!--     buckets[6]=buckets[6]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=600 & temp_count < 700){ -->
-<!--     buckets[7]=buckets[7]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=700 & temp_count < 800){ -->
-<!--     buckets[8]=buckets[8]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=800 & temp_count < 900){ -->
-<!--     buckets[9]=buckets[9]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=900 & temp_count < 1000){ -->
-<!--     buckets[10]=buckets[10]+1 -->
-<!--   } -->
-<!--   else if(temp_count>=1000){ -->
-<!--     buckets[11]=buckets[11]+1 -->
-<!--   } -->
-<!--   else{ -->
-<!--     print(paste(c("ERROR at index: ",i))) -->
-<!--   } -->
-<!--   i=i+1 -->
-<!-- } -->
-
-<!-- plot(buckets) -->
-
-<!-- ``` -->
-<!-- ```{r} -->
-
-<!-- mean(city_counts$count) -->
-<!-- sd(city_counts$count) -->
-<!-- quantile(city_counts$count) -->
-
-<!-- ``` -->
-
-<!-- Looks like most of the cities fall into the first bucket of less than 100 businesses. However, we want to narrow our search to just large cities, so let's remove that bucket. -->
-
-<!-- ```{r} -->
-<!-- city_counts2 = sqldf("select * from city_counts where count >100") -->
-<!-- buckets2 = buckets[2:length(buckets)] -->
-<!-- plot(buckets2) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-
-<!-- mean(city_counts2$count) -->
-<!-- sd(city_counts2$count) -->
-<!-- quantile(city_counts2$count) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- city_counts3 = sqldf("select * from city_counts where count >100 and count <1000") -->
-<!-- mean(city_counts3$count) -->
-<!-- sd(city_counts3$count) -->
-<!-- quantile(city_counts3$count) -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-<!-- #subset by >245 obs -->
-<!-- large_cities = sqldf("select city, state, count(business_id) as count from restaurants_open group by city having count > 245") -->
-<!-- large_cities -->
-<!-- ``` -->
-
-<!-- Let's take a look at demographics for our potential cities: -->
-
-<!-- ```{r} -->
-
-<!-- demographics = read.csv("demographics.csv",stringsAsFactors = FALSE) -->
-<!-- sqldf("select city, pop_by_race_2015 from demographics order by pop_by_race_2015") -->
-<!-- ``` -->
-
-<!-- We can see that Champaign definately doesn't meet our criteria for city size, so I'll drop it. Althought Tempe isn't as large as some of the other cities, I will make a judgement call and still group it as a upper mid to large sized city. -->
-
-<!-- ```{r} -->
-
-<!-- #drop champaign -->
-<!-- demographics = demographics[-1,] -->
-<!-- demographics -->
-<!-- ``` -->
-
-<!-- ```{r} -->
-
-<!-- #find all occurances of restaurant types in each location -->
-
-<!-- cities_usethis = sqldf("select city from demographics") -->
-<!-- restaurants_usethis = sqldf("select * from restaurants_open where (city='Chandler' or -->
-<!--                             city='Charlotte' or city='Cleveland' or city='Gilbert' -->
-<!--                             or city='Glendale' or city='Henderson' or city='Las Vegas' -->
-<!--                             or city='Madison' or city='Mesa' or city='Phoenix' -->
-<!--                             or city='Pittsburgh' or city='Scottsdale' or city='Tempe')") -->
-
-<!-- get_city=function(df,i){ -->
-<!--   return(df$city[i]) -->
-<!-- } -->
-
-
-<!-- create_hashmap = function(){ -->
-<!--   key="type" -->
-<!--   value=0 -->
-<!--   temp = hashmap(key,value) -->
-<!--   temp$erase(key) -->
-<!--   return(temp) -->
-<!-- } -->
-
-<!-- hmap_chandler = create_hashmap() -->
-<!-- hmap_charlotte = create_hashmap() -->
-<!-- hmap_cleveland = create_hashmap() -->
-<!-- hmap_gilbert = create_hashmap() -->
-<!-- hmap_glendale = create_hashmap() -->
-<!-- hmap_henderson = create_hashmap() -->
-<!-- hmap_lasvegas = create_hashmap() -->
-<!-- hmap_madison = create_hashmap() -->
-<!-- hmap_mesa = create_hashmap() -->
-<!-- hmap_phoenix = create_hashmap() -->
-<!-- hmap_pittsburgh = create_hashmap() -->
-<!-- hmap_scottsdale = create_hashmap() -->
-<!-- hmap_tempe = create_hashmap() -->
-
-<!-- #takes string, delim by pipe |, counts occurances, updates hmap -->
-<!-- update_hashmap = function(hmap,s){ -->
-<!--   vec=unlist(strsplit(s,split="\\|")) -->
-<!--   len = length(vec) -->
-<!--   i = 1 -->
-<!--   while(i<=len){ -->
-
-<!--     if(hmap$has_key(vec[i])){ -->
-<!--       temp = hmap$find(vec[i]) -->
-<!--       temp = temp+1 -->
-<!--       hmap$insert(vec[i],temp) -->
-<!--     } -->
-<!--     else{  -->
-<!--       hmap$insert(vec[i],1) -->
-<!--     } -->
-<!--     i=i+1 -->
-<!--   } -->
-<!--   return(hmap) -->
-<!-- } -->
-
-<!-- i = 1 -->
-<!-- while(i <= length(restaurants_usethis$business_id)){ -->
-<!--   city=get_city(restaurants_usethis,i) -->
-<!--   cat = restaurants_usethis$categories[i] -->
-<!--   if(city=="Chandler"){ -->
-<!--     hmap_chandler=update_hashmap(hmap_chandler,cat) -->
-<!--   } -->
-<!--   else if(city=="Charlotte"){ -->
-<!--     hmap_charlotte=update_hashmap(hmap_charlotte,cat) -->
-<!--   } -->
-<!--   else if(city=="Cleveland"){ -->
-<!--     hmap_cleveland=update_hashmap(hmap_cleveland,cat) -->
-<!--   } -->
-<!--   else if(city=="Gilbert"){ -->
-<!--     hmap_gilbert=update_hashmap(hmap_gilbert,cat) -->
-<!--   } -->
-<!--   else if(city=="Glendale"){ -->
-<!--     hmap_glendale=update_hashmap(hmap_glendale,cat) -->
-<!--   } -->
-<!--   else if(city=="Henderson"){ -->
-<!--     hmap_henderson=update_hashmap(hmap_henderson,cat) -->
-<!--   } -->
-<!--   else if(city=="Las Vegas"){ -->
-<!--     hmap_lasvegas=update_hashmap(hmap_lasvegas,cat) -->
-<!--   } -->
-<!--   else if(city=="Madison"){ -->
-<!--     hmap_madison=update_hashmap(hmap_madison,cat) -->
-<!--   } -->
-<!--   else if(city=="Mesa"){ -->
-<!--     hmap_mesa=update_hashmap(hmap_mesa,cat) -->
-<!--   } -->
-<!--   else if(city=="Phoenix"){ -->
-<!--     hmap_phoenix=update_hashmap(hmap_phoenix,cat) -->
-<!--   } -->
-<!--   else if(city=="Pittsburgh"){ -->
-<!--     hmap_pittsburgh=update_hashmap(hmap_pittsburgh,cat) -->
-<!--   } -->
-<!--   else if(city=="Scottsdale"){ -->
-<!--     hmap_scottsdale=update_hashmap(hmap_scottsdale,cat) -->
-<!--   } -->
-<!--   else if(city=="Tempe"){ -->
-<!--     hmap_tempe=update_hashmap(hmap_tempe,cat) -->
-<!--   } -->
-<!--   else{ -->
-<!--     print(paste(c("ERROR at index: ",i))) -->
-<!--   } -->
-
-
-<!--   i=i+1 -->
-<!-- } -->
-
-
-
-<!-- ``` -->
-
-<!-- ```{r} -->
-
-<!-- hmap_vec = c(hmap_chandler,hmap_charlotte,hmap_cleveland,hmap_gilbert, -->
-<!--              hmap_glendale,hmap_henderson,hmap_lasvegas,hmap_madison, -->
-<!--              hmap_mesa,hmap_phoenix,hmap_pittsburgh,hmap_scottsdale, -->
-<!--              hmap_tempe) -->
-<!-- hmap_vec -->
-
-<!-- category_demographics=function(hmap_vec,s,demographics){ -->
-<!--   #values_vec = c(hmap_vec[1]$find(s),hmap_vec[2]$find(s), -->
-<!--   #               hmap_vec[3]$find(s),hmap_vec[4]$find(s), -->
-<!--   #               hmap_vec[5]$find(s),hmap_vec[6]$find(s), -->
-<!--   #               hmap_vec[7]$find(s),hmap_vec[8]$find(s), -->
-<!--   #               hmap_vec[9]$find(s),hmap_vec[10]$find(s), -->
-<!--   #               hmap_vec[11]$find(s),hmap_vec[12]$find(s), -->
-<!--   #               hmap_vec[13]$find(s),hmap_vec[14]$find(s)) -->
-<!--   values_vec=c() -->
-<!--   for(i in 1:length(hmap_vec)){ -->
-<!--     values_vec = c(values_vec,hmap_vec[[i]]$find(s)) -->
-<!--   } -->
-
-<!--   return(values_vec) -->
-<!-- } -->
-
-<!-- test = category_demographics(hmap_vec,"Chinese",demographics) -->
-<!-- test_reg = lm(test~demographics$asian) -->
-<!-- summary(test_reg) -->
-<!-- plot(demographics$asian,test) -->
-<!-- lines(demographics$asian,test_reg$fitted.values) -->
-
-<!-- #need to factor in %s -->
-<!-- asian_percent = demographics$asian/demographics$pop_by_race_2015 -->
-<!-- asian_percent -->
-
-<!-- restaurants_usethis -->
-<!-- cities_usethis -->
-<!-- large_cities -->
-
-<!-- city_restaurant_counts=sqldf("select large_cities.city, count from (large_cities join cities_usethis on large_cities.city=cities_usethis.city)") -->
-<!-- city_restaurant_counts -->
-
-<!-- restaurant_chinese_percent=test/city_restaurant_counts$count -->
-<!-- restaurant_chinese_percent -->
-<!-- percent_reg_test = lm(restaurant_chinese_percent~asian_percent) -->
-<!-- summary(percent_reg_test) -->
-<!-- percent_reg_test2 = lm(restaurant_chinese_percent~asian_percent+demographics$income_index+demographics$pop_growth) -->
-<!-- summary(percent_reg_test2) -->
-<!-- ``` -->
-
-
-<!-- #analyze reviews -->
-
-<!-- ```{r} -->
-<!-- #subset reviews to match city data -->
-<!-- reviews_usethis=sqldf("select review.stars, date, text, categories, city from review join restaurants_usethis on review.business_id=restaurants_usethis.business_id") -->
-
-<!-- ``` -->
-
-
-
-
-sources:
-fred
-yelp
-https://www.bea.gov/iTable/iTable.cfm?reqid=9&step=1&acrdn=2#reqid=9&step=1&isuri=1&904=2004&903=64&906=q&905=2016&910=x&911=0
-https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
+YELP: https://www.yelp.com/dataset_challenge \newline
+FRED: https://fred.stlouisfed.org/  \newline
+BEA: https://www.bea.gov/iTable/iTable.cfm?reqid=9&step=1&acrdn=2#reqid=9&step=1&isuri=1&904=2004&903=64&906=q&905=2016&910=x&911=0 \newline
+Yahoo Finance: https://finance.yahoo.com/quote/YELP?p=YELP \newline
 
 
