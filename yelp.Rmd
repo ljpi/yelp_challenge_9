@@ -1,14 +1,15 @@
 ---
-title: "Modeling Restaurant-Goer's Behavior in The Great Recession: An Econometric Case Study"
+title: 'Modeling Restaurant-Goer''s Behavior in The Great Recession: An Econometric
+  Case Study'
 author: "Lester Pi"
-date: "3/18/2017"
+date: "4/12/2017"
 output:
-  pdf_document: default
-  latex_engine: xelatex
   html_document: default
+  latex_engine: xelatex
+  pdf_document: default
 ---
 
-```{r, include=FALSE}
+```{r, echo=FALSE, include=FALSE}
 library(jsonlite)
 library('vars')
 library('readxl')
@@ -94,14 +95,14 @@ Most of the data is either transformed into growth rates, detrended and/or seaso
 
 3. The Yelp data is a Yelp-decided subset of their data. This can cause large selection bias. I examined the data and saw that it includes small, medium, and large cities alike. There is no way to obtain the unreleased portion of data.
 
-4. Level sets vs. growth rates. Growth rates allow our data to be transformed into stationary (or nearly stationary) data. However, they do not always make intuitive sense for this case study. Therefore, I used the levels for creating linear models, but used growth rates for determining Granger causality.
+4. Level sets vs. growth rates. Growth rates allow our data to be transformed into stationary (or nearly stationary) data. However, they do not always make intuitive sense for this case study. Therefore, I used the levels for creating linear models, but used growth rates for determining Granger causality and VAR models.
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #SETUP
 setwd("C:/cygwin64/home/Lester/yelp_challenge_9")
 
-
+par(xpd=NA)
 
 load_json = function(filename){
   json_file = file(filename)
@@ -142,18 +143,18 @@ add_recession_dummy = function(l){
 
 
 descriptive_stats = function(lm_mod, name){
-  par(mfrow=c(3,2))
-  rec = recresid(resid(lm_mod)~1,col="skyblue3")
-  plot(resid(lm_mod))
-  truehist(resid(lm_mod))
-  print(resettest(lm_mod))
-  acf(resid(lm_mod))
-  pacf(resid(lm_mod))
-  jarque.bera.test(resid(lm_mod))
-  plot(efp(resid(lm_mod)~1,type="Rec-CUSUM"))
-  plot(rec,pch=16)
-  abline(h=0,col="red")
-  title(paste("Descriptive Statistics:",name,sep=" "),outer=TRUE)
+  # par(mfrow=c(3,2))
+  # rec = recresid(resid(lm_mod)~1,col="skyblue3")
+  # plot(resid(lm_mod))
+  # truehist(resid(lm_mod))
+  # print(resettest(lm_mod))
+  # acf(resid(lm_mod))
+  # pacf(resid(lm_mod))
+  # jarque.bera.test(resid(lm_mod))
+  # plot(efp(resid(lm_mod)~1,type="Rec-CUSUM"))
+  # plot(rec,pch=16)
+  # abline(h=0,col="red")
+  # title(paste("Descriptive Statistics:",name,sep=" "),outer=TRUE)
 }
 
 test_stationary = function(t){
@@ -192,7 +193,7 @@ buildWordCloud = function(corpus, pal,val, name){
 
 First, I will explore the Yelp stock data to see if it is of any relevance in an attempt to handle any cases of endogeneity. In this case, the stock data will be a representation of the company performance. Intuitively, there is a chance it may be an instrumental variable such that the better the company is doing, the more they can advertise to, accumulate, and support a larger userbase.
 
-```{r, include=FALSE, message=FALSE}
+```{r, echo=FALSE, include=FALSE, message=FALSE}
 user = load_json("yelp_academic_dataset_user.json")
 colnames(user)
 subset_users = user[4]
@@ -216,7 +217,7 @@ stock_users = with(users_df, users_df[(users_df$date >= "2012-02-01"), ])
 ```
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 plot(stock_users,type="l",ylab="New Users",xlab="Date", main= "New User Acounts by Month")
 
 yelp_stock = get.hist.quote("YELP",end="2017-01-30",quote="AdjClose",compression="m")
@@ -253,7 +254,7 @@ The number of new users do not have an effect on the stock value of Yelp and vic
 
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #remove user data to save memory
 
 rm(user)
@@ -270,7 +271,7 @@ rm(stock_users)
 
 We will attempt to connect new users with new reviews.
 
-```{r, include=FALSE, message=FALSE}
+```{r, echo=FALSE, include=FALSE, message=FALSE}
 
 review = load_json("yelp_academic_dataset_review.json")
 
@@ -313,7 +314,7 @@ review_counts_by_date = sqldf("select date, count(date) from review_date_star gr
 ```
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 # plot(review_counts_by_date$date,review_counts_by_date$`count(date)`,type="l")
 
 #convert to monthly
@@ -363,13 +364,13 @@ test_cointegration(resid(user_rev_lm))
 
 ```
 
-Through the VAR model results, Granger causality test, and cointegration test, we can conclude that users and reviews can be used interchangably. The error descriptive statistics do not look perfect, but we just want to see if reviews can be used in place of users. From here on out, we will focus on reviews since reviews contain more valuable information than the user data.
+Through the VAR model results, Granger causality test, and cointegration test, we can conclude that users and reviews can be used interchangably. The error descriptive statistics (Note: error descriptive statistics surpressed in writeup) do not look perfect, but we just want to see if reviews can be used in place of users. From here on out, we will focus on reviews since reviews contain more valuable information than the user data.
 
 #Do Review Scores Change?
 
 By examining review scores, we can see if people become more or less critical during the recession, and many other insights.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 
 #stars by month
@@ -442,7 +443,7 @@ descriptive_stats(detrend_stars_lm, "Average Stars Adjusted on Recession")
 
 The regression results cannot be trusted because the error statistics are all over the place. No conclusion can be made yet.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 #real gdp
 getSymbols('GDPC96', src = 'FRED')
@@ -510,7 +511,7 @@ Let's continue by splitting the restaurants by dollar signs (\$).
 
 How do people react to prices during a recession? To examine this, we will subset our data into 4 categories by price, one for each price level. This will be refered to as how many dollar signs (\$) a business is.
 
-```{r, include=FALSE, message=FALSE}
+```{r, echo=FALSE, include=FALSE, message=FALSE}
 #convert $ dollar signs to time series
 restaurant_visits = sqldf("select restaurant_reviews.date, business.attributes, restaurant_reviews.stars from restaurant_reviews join business on restaurant_reviews.business_id = business.business_id")
 
@@ -534,7 +535,7 @@ dollars_gbd_4 = sqldf("select date, count(date) from dollars_4 group by date ord
 
 ```
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 dollars_1_xts=xts(dollars_gbd_1$`count(date)`, as.Date(dollars_gbd_1$date,"%Y-%m-%d"))
 df_d_1 = apply.monthly(dollars_1_xts, sum)
@@ -569,7 +570,7 @@ recession_dummy_dollars_m = add_recession_dummy(df_dollars_1$date)
 
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 df_dollars_1_dlog = as.data.frame(diff(log(df_dollars_1$coredata.df_d_1.)))
 df_dollars_2_dlog = as.data.frame(diff(log(df_dollars_2$coredata.df_d_2.)))
 df_dollars_3_dlog = as.data.frame(diff(log(df_dollars_3$coredata.df_d_3.)))
@@ -614,7 +615,7 @@ rect(2007.9166667, -1000, 2009.5, 2000, col=rgb(red=150/255,green=25/255,blue=25
 There is a strong and obvious trend along with seasonality. This is something that should be wiped out as much as possible to see the true effect of the recession.
 
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 #seasonally adjust data and remove trend
 
@@ -671,7 +672,7 @@ Let's try to make it better.
 
 By controlling for the aggegated number of reviews between dollar signs, we can eliminate the effect that a drop in aggregated reviews (again, by dollar signs) can potentially have.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #levels
 lm_d1_adj_rev = lm(tslm_d1_resid~recession_dummy_dollars_m+df_rev_count$coredata.df_rev_m.)
 summary(lm_d1_adj_rev)
@@ -693,7 +694,7 @@ descriptive_stats(lm_d4_adj_rev, "New Reviews ($$$$) on Recession and New Review
 
 Adding new reviews in doesn't help much, but what about if we detrend and seasonally adjust?
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #detrend review counts
 
 ts_rev_count=ts(df_rev_count$coredata.df_rev_m.,start=c(2006,2),freq=12)
@@ -738,7 +739,7 @@ Since reviews can be modeled when broken down by prices, this gives more promise
 
 After splitting our reviews by prices, a re-examination of review scores is due.
 
-```{r, include=FALSE, message=FALSE}
+```{r, echo=FALSE, include=FALSE, message=FALSE}
 
 stars_by_restaurant_dollars = data.frame(restaurant_visits$date)
 stars_by_restaurant_dollars$dollars = get_dollar_signs(restaurant_visits$attributes)
@@ -760,7 +761,7 @@ dollars_obd_4_star = sqldf("select date, stars from dollars_4_star order by date
   
 ```
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 par(mfrow=c(2,2))
 
@@ -812,7 +813,7 @@ descriptive_stats(d4_star_lm, "Average Rating ($$$$) on Recession")
 The results look better, but still are not that great. If we are to interpret the regression anyways, however, it looks as if the lower priced restaurants have lower review scores. This could be a sign of many things, such as the substituters from (\$\$\$) and (\$\$\$\$) restaurants having higher expectations or people just want more bang for their buck. The higher priced restaurants do not see a change, which could be due to the type of people who still dine there during recessions. They could be part of the group unaffected by the recession.
 
 <!-- #how bout use stars in reg for dolla dolla -->
-<!-- ```{r, warning=FALSE} -->
+<!-- ```{r, echo=FALSE, warning=FALSE} -->
 
 
 
@@ -853,7 +854,7 @@ The results look better, but still are not that great. If we are to interpret th
 
 By doing a sentiment analysis on the text in the reviews, we can see the association with words during the recession and the period of time (of equal length) directly after the recession.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 stopWords = removePunctuation(stopwords('SMART'))
 
@@ -875,7 +876,7 @@ tidy_norec = tidy(dtm_norec)
 
 Word Clouds:
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 par(mfrow=c(1,2))
 buildWordCloud(corpus_reviews_rec, "Spectral",8, "test")
@@ -888,7 +889,7 @@ It is hard to tell which word cloud is from the recession and which is from the 
 
 Sentiment Visualization:
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #reference: https://cran.r-project.org/web/packages/tidytext/vignettes/tidying_casting.html
 ap_sentiments <- tidy_rec %>%
   inner_join(get_sentiments("bing"), by = c(term = "word"))
@@ -981,14 +982,14 @@ By using restaurant expenditures, there can be a connection made between the rev
 
 But first, lets confirm that GDP and the recession can be linked to restaurant expenditures.
 
-```{r, include=FALSE, message=FALSE}
+```{r, echo=FALSE, include=FALSE, message=FALSE}
 
 restaurant_expenditures=read.csv("restaurant_expenditures.csv")
 # restaurant_expenditures
 
 ```
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 #add x axis with dates
 rest_exp_dates = seq(as.Date("2005/12/01"), by = "quarter",length.out = 44)
@@ -1029,7 +1030,7 @@ The assumption that restaurant expenditures are related to the recession and GDP
 
 By seasonally adjusting the growth rate in new reviews, a Granger causality test can be run between restaurant expenditures and new reviews.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 # rev_exp_combined = cbind(rest_real_exp_diff_log,log_rev_quarter)
 # select=VARselect(rev_exp_combined,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
@@ -1074,7 +1075,7 @@ New reviews is Granger caused by restaurant expenditures. This makes sense as re
 
 A full model that incorporates all the previous results will be useful to show the real effect of the recession and determine if there is a causal inference that can be made.
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 #convert to quarterly
 #add in rest exp
 #try var model with adding in rest exp
@@ -1154,7 +1155,7 @@ The regression results and error descriptive statistics are actually worse in th
 
 Since new reviews is Granger caused by restaurant expenditures, can we find a causal inference through comprehensive VAR models that include the "Better" model, with restaurant expenditures added in?
 
-```{r, warning=FALSE}
+```{r, echo=FALSE, warning=FALSE}
 
 #how about a var
 #standardize so min value is 1
@@ -1170,32 +1171,32 @@ combinedFull1 = cbind(ts_d1_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quar
 select=VARselect(combinedFull1,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar1=VAR(combinedFull1,p=select$select[1])
 plot(fullVar1$y)
-summary(fullVar1)
+# summary(fullVar1)
 
 combinedFull2 = cbind(ts_d2_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull2,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar2=VAR(combinedFull2,p=select$select[1])
 plot(fullVar2$y)
-summary(fullVar2)
+# summary(fullVar2)
 
 combinedFull3 = cbind(ts_d3_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull3,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar3=VAR(combinedFull3,p=select$select[1])
 plot(fullVar3$y)
-summary(fullVar3)
+# summary(fullVar3)
 
 combinedFull4 = cbind(ts_d4_quarterly_growth,rec_dummy_rev_growth_q,log_rev_quarter_adj,rest_real_exp_diff_log)
 select=VARselect(combinedFull4,lag.max=4,type=c("const","trend","both","none"),season=NULL,exogen=NULL)
 fullVar4=VAR(combinedFull4,p=select$select[1])
 plot(fullVar4$y)
-summary(fullVar4)
+# summary(fullVar4)
 
 
 
 
 ```
 
-The results of the VAR models are not very assuring. They don't point to any real causal inferences. More research and work needs to be done to create a truley causal inference model.
+The results of the VAR models (surpressed) are not very assuring. They don't point to any real causal inferences. More research and work needs to be done to create a truley causal model.
 
 #Conclusion
 
@@ -1203,14 +1204,7 @@ The most effective model has been using the amount of reviews by dollar signs an
 
 Sentiment analysis on the review text showed that there was a possibility that reviews became more negative and price focused during the recession. However, the differences in sample size and potentially statistically insignificance of the results leave the sentiment analysis without a definite answer.
 
-It was determined that the causality model was not valid and needs more research and work..
-
-#Future Work
-
-1. If possible, examine all of Yelp's data, not just the Dataset Challenge.
-2. In the event of a future recession, add the data in to create a more comprehensive model.
-3. Do a stronger NLP analysis such as bigrams or creating a timeseries of words related to prices.
-4. Improve the VAR models.
+It was determined that the VAR model was not very effective in showing potential causality.
 
 #Sources
 
