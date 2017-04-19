@@ -158,12 +158,12 @@ descriptive_stats = function(lm_mod, name){
 }
 
 test_stationary = function(t){
-  print(kpss.test(t))
-  print(adf.test(t))
+  # print(kpss.test(t))
+  # print(adf.test(t))
 }
 
 test_cointegration = function(resid){
-  print(test_stationary(resid))
+  # print(test_stationary(resid))
 }
 
 #dollar sign extractor
@@ -811,43 +811,6 @@ descriptive_stats(d4_star_lm, "Average Rating ($$$$) on Recession")
 ```
 
 The results look better, but still are not that great. If we are to interpret the regression anyways, however, it looks as if the lower priced restaurants have lower review scores. This could be a sign of many things, such as the substituters from (\$\$\$) and (\$\$\$\$) restaurants having higher expectations or people just want more bang for their buck. The higher priced restaurants do not see a change, which could be due to the type of people who still dine there during recessions. They could be part of the group unaffected by the recession.
-
-<!-- #how bout use stars in reg for dolla dolla -->
-<!-- ```{r, echo=FALSE, warning=FALSE} -->
-
-
-
-<!-- lm_d1_adj_rev_adj_star = lm(tslm_d1_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_1_star$avg) -->
-<!-- summary(lm_d1_adj_rev_adj_star) -->
-
-
-<!-- lm_d2_adj_rev_adj_star = lm(tslm_d2_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_2_star$avg) -->
-<!-- summary(lm_d2_adj_rev_adj_star) -->
-
-
-<!-- lm_d3_adj_rev_adj_star = lm(tslm_d3_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_3_star$avg) -->
-<!-- summary(lm_d3_adj_rev_adj_star) -->
-
-
-<!-- lm_d4_adj_rev_adj_star = lm(tslm_d4_resid~recession_dummy_dollars_m+ts_rev_count_adj+df_dollars_4_star$avg) -->
-<!-- summary(lm_d4_adj_rev_adj_star) -->
-
-
-<!-- descriptive_stats(lm_d1_adj_rev_adj_star) -->
-<!-- descriptive_stats(lm_d2_adj_rev_adj_star) -->
-<!-- descriptive_stats(lm_d3_adj_rev_adj_star) -->
-<!-- descriptive_stats(lm_d4_adj_rev_adj_star) -->
-
-<!-- vif(lm_d1_adj_rev_adj_star) -->
-<!-- vif(lm_d2_adj_rev_adj_star) -->
-<!-- vif(lm_d3_adj_rev_adj_star) -->
-<!-- vif(lm_d4_adj_rev_adj_star) -->
-
-<!-- #not really a difference, star ratings dynamics not really linked to review numbers, but both effected by rec in dif ways -->
-
-
-<!-- ``` -->
-
 
 
 #Sentiment Analysis
